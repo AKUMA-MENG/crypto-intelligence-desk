@@ -53,6 +53,12 @@ if PUBLIC_ORIGIN:
         sys.exit(2)
     ALLOWED_APP_ORIGINS.add(PUBLIC_ORIGIN)
 
+ALLOWED_TARGET_HOSTS = {
+    host.strip().lower()
+    for host in os.environ.get("CID_ALLOWED_TARGET_HOSTS", "").split(",")
+    if host.strip()
+}
+
 # 允许从浏览器透传到目标服务器的请求头(鉴权用)
 FORWARD_HEADERS = {"authorization", "x-api-key", "anthropic-version", "x-goog-api-key", "content-type"}
 
@@ -88,6 +94,18 @@ def is_public_https_url(url):
             return False
         return all(ipaddress.ip_address(item[4][0]).is_global for item in addresses)
     except (OSError, ValueError):
+        return False
+
+
+def is_allowed_target_url(url):
+    """公网部署可选目标域名白名单；本地模式默认维持原有兼容性。"""
+    if not is_public_https_url(url):
+        return False
+    if not ALLOWED_TARGET_HOSTS:
+        return True
+    try:
+        return urllib.parse.urlparse(url).hostname.lower() in ALLOWED_TARGET_HOSTS
+    except (AttributeError, ValueError):
         return False
 
 
@@ -231,8 +249,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def _forward(self, method):
         qs = urllib.parse.urlparse(self.path).query
         url = urllib.parse.parse_qs(qs).get("u", [None])[0]
-        if not url or not is_public_https_url(url):
-            return self._reply(400, b'{"error":"target must be a public https url"}')
+        if not url or not is_allowed_target_url(url):
+            return self._reply(400, b'{"error":"target must be an allowed public https url"}')
 
         body = None
         if method == "POST":
