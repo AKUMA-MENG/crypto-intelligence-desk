@@ -1,0 +1,17 @@
+# Local portable runtime downloaded on first Windows launch
+.runtime/
+
+# Python-generated files
+__pycache__/
+*.py[cod]
+
+# Editor and OS metadata
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Local archives and temporary files
+*.zip
+*.tmp
+*.log

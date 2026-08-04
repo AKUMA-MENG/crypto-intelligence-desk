@@ -1,0 +1,1249 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>币圈新闻监控台</title>
+<style>
+:root{
+  --bg:#0a0d12; --panel:#111722; --panel2:#0d1219; --border:#1d2736; --border2:#2a3850;
+  --text:#d8e2f0; --dim:#71829c; --dim2:#4a586e;
+  --accent:#38bdf8; --gold:#f5b944; --hot:#fb7185;
+  --up:#2fd08c; --down:#f66d6d;
+  --mono:ui-monospace,'Cascadia Mono','JetBrains Mono',Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,-apple-system,'Microsoft YaHei',sans-serif;font-size:14px;overflow:hidden;
+  display:flex;flex-direction:column;
+  background-image:radial-gradient(1200px 500px at 70% -10%, #12203255 0%, transparent 60%);}
+header,#alertZone{flex:none}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-thumb{background:#26334a;border-radius:4px}
+::-webkit-scrollbar-track{background:transparent}
+button{font-family:inherit}
+
+/* ===== header ===== */
+header{display:flex;align-items:center;gap:14px;padding:9px 16px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,#121a28,#0e141d);flex-wrap:wrap}
+.logo{font-size:16px;font-weight:700;letter-spacing:.5px;white-space:nowrap}
+.logo b{color:var(--gold)}
+.livedot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--up);margin-left:6px;animation:blink 2s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+.srcdots{display:flex;gap:10px;font-size:11px;color:var(--dim)}
+.srcdots span{display:flex;align-items:center;gap:4px;cursor:default}
+.srcdots i{width:6px;height:6px;border-radius:50%;background:var(--dim2);display:inline-block}
+.srcdots .ok i{background:var(--up)} .srcdots .bad i{background:var(--down)}
+.spacer{flex:1}
+.hbtn{background:var(--panel);border:1px solid var(--border2);color:var(--text);padding:5px 12px;border-radius:6px;cursor:pointer;font-size:12.5px;transition:.15s}
+.hbtn:hover{border-color:var(--accent);color:var(--accent)}
+.hbtn.warn{border-color:var(--gold);color:var(--gold)}
+select.hsel,input.hin{background:var(--panel);border:1px solid var(--border2);color:var(--text);padding:5px 8px;border-radius:6px;font-size:12.5px;outline:none}
+input.hin{width:120px}
+input.hin:focus,select.hsel:focus{border-color:var(--accent)}
+#nextEvt{font-size:12px;color:var(--gold);border:1px solid #3a3320;background:#1a1710;padding:4px 10px;border-radius:6px;cursor:pointer;white-space:nowrap}
+#nextEvt.soon{color:#fff;background:var(--hot);border-color:var(--hot);animation:blink 1s infinite}
+
+.pos{color:var(--up)} .neg{color:var(--down)}
+
+/* ===== alert zone ===== */
+#alertZone{padding:0 16px}
+.alert{display:flex;align-items:center;gap:10px;margin-top:8px;padding:10px 14px;border-radius:8px;border:1px solid var(--hot);
+  background:linear-gradient(90deg,#2a121a,#1a0f14);animation:pulseA 1.6s infinite;cursor:pointer}
+.alert.lv5{border-color:#ff3355;background:linear-gradient(90deg,#38101d,#200e15)}
+@keyframes pulseA{0%,100%{box-shadow:0 0 0 0 #fb718533}50%{box-shadow:0 0 18px 2px #fb718544}}
+.alert .tag{background:var(--hot);color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;flex:none}
+.alert .t{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.alert .x{color:var(--dim);cursor:pointer;padding:0 4px;font-size:16px}
+.alert .x:hover{color:#fff}
+
+/* ===== feed ===== */
+main{flex:1 1 0;min-height:0;overflow-y:auto;padding:10px 16px 60px}
+#feed{max-width:980px;margin:0 auto;display:flex;flex-direction:column;gap:8px}
+.card{background:var(--panel);border:1px solid var(--border);border-left:3px solid var(--border2);border-radius:8px;padding:10px 14px;animation:slideIn .3s ease}
+@keyframes slideIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:none}}
+.card.lv4{border-left-color:var(--gold)}
+.card.lv5{border-left-color:var(--hot)}
+.card.lv4 .title{color:#ffd98a}
+.card.lv5 .title{color:#ff9eae}
+.card .meta{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--dim);margin-bottom:4px}
+.card .meta .time{font-family:var(--mono)}
+.card .meta .src{border:1px solid var(--border2);border-radius:4px;padding:0 6px}
+.badge-new{background:var(--accent);color:#04121c;font-size:10px;font-weight:800;padding:1px 6px;border-radius:4px;animation:blink 1.2s 6}
+.card .title{font-size:14.5px;font-weight:650;line-height:1.45;cursor:pointer}
+.card .body{color:#a8b6ca;font-size:13px;line-height:1.55;margin-top:4px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;cursor:pointer}
+.card.open .body{display:block;-webkit-line-clamp:unset}
+.card .srclink{font-size:11px;color:var(--dim2);text-decoration:none}
+.card .srclink:hover{color:var(--accent)}
+
+/* AI row */
+.airow{margin-top:8px;padding-top:8px;border-top:1px dashed #223048;font-size:12.5px}
+.ai-wait{color:var(--dim);font-size:12px}
+.ai-wait::after{content:'…';animation:blink 1s infinite}
+.ai-err{color:var(--down);font-size:12px}
+.alink{color:var(--accent);cursor:pointer;text-decoration:underline;font-size:12px}
+.brow{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.bdg{padding:2px 9px;border-radius:5px;font-weight:700;font-size:12px}
+.bdg.good{background:#0c2b1e;color:var(--up);border:1px solid #1d5c41}
+.bdg.bad{background:#2f1518;color:var(--down);border:1px solid #6b2a30}
+.bdg.flat{background:#1a2230;color:var(--dim);border:1px solid var(--border2)}
+.mini{color:var(--dim);font-size:11.5px}
+.mini b{color:var(--text);font-weight:600}
+.lvl{display:inline-flex;gap:2px;vertical-align:-1px}
+.lvl i{width:8px;height:10px;background:#223048;border-radius:1.5px}
+.lvl i.on{background:var(--accent)}
+.lvl.hi i.on{background:var(--gold)}
+.lvl.xhi i.on{background:var(--hot)}
+.cat{background:#182338;color:#8fb3e8;border-radius:4px;padding:1.5px 7px;font-size:11px}
+.pin{background:#332a12;color:var(--gold);border-radius:4px;padding:1.5px 7px;font-size:11px}
+.coin{background:#0f2233;color:#6fd3ff;border:1px solid #1d4258;border-radius:4px;padding:1.5px 8px;font-size:11.5px;font-family:var(--mono);font-weight:700}
+.why{margin-top:6px;color:#bfcbdc;line-height:1.55}
+.rev{margin-top:4px;color:#c9a86a;font-size:12px}
+.deep{color:#c084fc;font-size:10.5px;border:1px solid #4c2f6b;border-radius:4px;padding:0 5px}
+
+.dclose{margin-left:auto;background:none;border:none;color:var(--dim);font-size:20px;cursor:pointer}
+.dclose:hover{color:#fff}
+.derr{color:var(--down);font-size:12.5px;padding:8px 0}
+
+/* ===== modals ===== */
+#overlay{position:fixed;inset:0;background:#000a;z-index:70;display:none}
+#overlay.on{display:block}
+.modal{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(.98);width:620px;max-width:94vw;max-height:88vh;overflow-y:auto;background:#0f1622;border:1px solid var(--border2);border-radius:10px;z-index:80;display:none;padding:0 0 16px;box-shadow:0 24px 80px #000c}
+.modal.on{display:block;transform:translate(-50%,-50%) scale(1)}
+.mhead{display:flex;align-items:center;padding:13px 18px;border-bottom:1px solid var(--border);font-weight:700;font-size:15px;position:sticky;top:0;background:#0f1622;z-index:2}
+.mhead .dclose{font-size:18px}
+.msec{padding:12px 18px 0}
+.msec h4{font-size:12px;color:var(--accent);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}
+.frow{display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:13px;flex-wrap:wrap}
+.frow label{color:var(--dim);min-width:88px;font-size:12.5px}
+.frow input[type=text],.frow input[type=password],.frow input[type=number],.frow select,.frow input[type=datetime-local]{flex:1;min-width:120px;background:var(--panel);border:1px solid var(--border2);color:var(--text);padding:6px 9px;border-radius:6px;font-size:12.5px;outline:none}
+.frow input:focus,.frow select:focus{border-color:var(--accent)}
+.note{font-size:11.5px;color:var(--dim2);line-height:1.5;margin:4px 0 8px}
+.pbtn{background:var(--accent);color:#04121c;border:none;padding:8px 22px;border-radius:6px;font-weight:700;font-size:13.5px;cursor:pointer}
+.pbtn:hover{filter:brightness(1.15)}
+.sbtn{background:var(--panel);border:1px solid var(--border2);color:var(--text);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12.5px}
+.sbtn:hover{border-color:var(--accent)}
+.tgl{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12.5px;color:var(--text)}
+.evrow{display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid var(--border);font-size:13px}
+.evrow .cd{font-family:var(--mono);color:var(--gold);min-width:110px;font-weight:700}
+.evrow .cd.past{color:var(--dim2)}
+.evrow .nm{flex:1}
+.evrow .del{color:var(--dim2);cursor:pointer;font-size:15px}
+.evrow .del:hover{color:var(--down)}
+.footnote{position:fixed;bottom:0;left:0;right:0;text-align:center;font-size:10.5px;color:var(--dim2);padding:5px;background:#0a0d12ee;border-top:1px solid var(--border);z-index:5}
+.setupband{max-width:980px;margin:0 auto 8px;background:#1d1a10;border:1px solid #4d411f;color:var(--gold);border-radius:8px;padding:10px 14px;font-size:13px;display:flex;align-items:center;gap:10px}
+@media (max-width:760px){ header{gap:8px} }
+</style>
+<style id="terminalTheme">
+:root{
+  --bg:#060b12;
+  --panel:#0b1420;
+  --panel2:#0e1926;
+  --panel3:#111f2e;
+  --border:#17283a;
+  --border2:#25415a;
+  --text:#d7e4ef;
+  --dim:#7b91a7;
+  --dim2:#50657a;
+  --accent:#63b9df;
+  --accent-soft:#132d3f;
+  --gold:#d5ad62;
+  --gold-soft:#2a2419;
+  --hot:#d87972;
+  --up:#66c49a;
+  --down:#df817a;
+  --topbar:#08111bcc;
+  --rail:#08111bde;
+  --main:#07101a99;
+  --card:#0a1521;
+  --card-hover:#0c1825;
+  --ai-panel:#07111b;
+  --control:#0a1622;
+  --modal-bg:#0a1520;
+  --modal-head:#0c1824;
+  color-scheme:dark;
+  --mono:'Cascadia Mono','SFMono-Regular',Consolas,'Liberation Mono',monospace;
+  --sans:Inter,'Segoe UI',system-ui,-apple-system,'Microsoft YaHei',sans-serif;
+}
+*{box-sizing:border-box}
+html,body{height:100%;background:var(--bg)}
+body{
+  color:var(--text);font-family:var(--sans);font-size:14px;overflow:hidden;display:flex;flex-direction:column;
+  background-image:linear-gradient(#0c18241c 1px,transparent 1px),linear-gradient(90deg,#0c182416 1px,transparent 1px);
+  background-size:32px 32px;
+}
+button,input,select{font:inherit}
+button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid #63b9df88;outline-offset:2px}
+::-webkit-scrollbar{width:7px;height:7px}
+::-webkit-scrollbar-thumb{background:#21384d;border-radius:8px}
+::-webkit-scrollbar-track{background:transparent}
+.spacer{flex:1}
+.pos{color:var(--up)}.neg{color:var(--down)}
+
+/* top command bar */
+.topbar{
+  min-height:68px;padding:0 20px;display:flex;align-items:center;gap:22px;flex:none;
+  background:var(--topbar);border-bottom:1px solid var(--border2);box-shadow:0 8px 28px #0005;
+}
+.brand{display:flex;align-items:center;gap:12px;min-width:245px}
+.brandmark{
+  width:36px;height:36px;display:grid;place-items:center;border:1px solid #47718d;background:#0c1c29;
+  color:var(--accent);font:700 12px/1 var(--mono);letter-spacing:.12em;box-shadow:inset 0 0 0 3px #08131e;
+}
+.brandcopy{display:flex;flex-direction:column;gap:3px}
+.brandname{font-size:15px;font-weight:700;letter-spacing:.04em;color:#e7f0f7;white-space:nowrap}
+.brandname b{color:inherit}
+.brandsub{font:10px/1 var(--mono);color:var(--dim2);letter-spacing:.16em;white-space:nowrap}
+.top-status{display:flex;align-items:center;gap:10px;color:var(--dim);font-size:11.5px}
+.status-pill{display:flex;align-items:center;gap:7px;padding:6px 9px;border:1px solid var(--border);background:#091520;color:#8da2b5}
+.livedot{width:6px;height:6px;border-radius:50%;background:var(--up);margin:0;animation:statusPulse 2.4s ease-in-out infinite}
+@keyframes statusPulse{0%,100%{opacity:1}50%{opacity:.38}}
+.sync-time{font-family:var(--mono);color:var(--dim2)}
+.top-actions{margin-left:auto;display:flex;align-items:center;gap:8px}
+.hbtn{
+  min-height:34px;padding:7px 11px;border:1px solid var(--border2);border-radius:3px;background:#0b1723;
+  color:#a9bdcc;font-size:12px;cursor:pointer;transition:border-color .15s,color .15s,background .15s;
+}
+.hbtn:hover{border-color:#4d7893;color:#d8eef8;background:#10202e}
+.hbtn.primary{border-color:#5c4c2c;color:#d9bb7d;background:#17150f}
+.btn-code{font:10px/1 var(--mono);letter-spacing:.08em;color:var(--dim2);margin-right:6px}
+
+/* three-column intelligence workspace */
+.workspace{
+  flex:1;min-height:0;display:grid;grid-template-columns:232px minmax(540px,1fr) 302px;
+  max-width:1720px;width:100%;margin:0 auto;
+}
+.left-rail,.right-rail{min-height:0;background:var(--rail)}
+.left-rail{border-right:1px solid var(--border);padding:18px 15px;overflow-y:auto}
+.right-rail{border-left:1px solid var(--border);padding:18px 15px;overflow-y:auto}
+.rail-block{padding:0 0 18px;margin-bottom:18px;border-bottom:1px solid var(--border)}
+.rail-block:last-child{border-bottom:0}
+.eyebrow{font:10px/1.2 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--accent)}
+.rail-heading{font-size:12px;font-weight:650;letter-spacing:.04em;color:#b9cbd8;margin:9px 0 12px}
+.filter-stack{display:grid;gap:10px}
+.control-label{display:grid;gap:6px;color:var(--dim);font-size:11px}
+select.hsel,input.hin{
+  width:100%;height:34px;padding:6px 9px;border:1px solid var(--border);border-radius:2px;background:var(--control);
+  color:#c4d5e1;font-size:12px;outline:none;
+}
+input.hin{width:100%}
+select.hsel:focus,input.hin:focus{border-color:#477895;background:#0d1c29}
+.srcdots{display:grid;gap:2px;font-size:11.5px;color:var(--dim)}
+.srcdots span{min-height:29px;padding:6px 7px;display:flex;align-items:center;gap:8px;border-left:2px solid transparent}
+.srcdots span.ok{color:#a9bdca;background:#0c1924;border-left-color:#386a5a}
+.srcdots span.bad{color:#a98683;background:#171214;border-left-color:#713e3b}
+.srcdots i{width:5px;height:5px;border-radius:50%;background:var(--dim2);box-shadow:none}
+.srcdots .ok i{background:var(--up)}.srcdots .bad i{background:var(--down)}
+.rail-note{font-size:11px;color:var(--dim2);line-height:1.65}
+.rail-note strong{color:#9eb2c1;font-weight:600}
+
+main#main{min-width:0;min-height:0;overflow-y:auto;padding:20px 22px 52px;background:var(--main)}
+.desk-head{display:flex;align-items:flex-end;gap:18px;margin:0 auto 15px;max-width:940px}
+.desk-title{font-size:21px;font-weight:680;letter-spacing:.01em;color:#e1ebf2;margin-top:7px}
+.desk-sub{margin-top:5px;color:var(--dim);font-size:11.5px}
+.metric-grid{margin-left:auto;display:grid;grid-template-columns:repeat(3,minmax(76px,1fr));border:1px solid var(--border);background:#08131e}
+.metric{padding:8px 11px;min-width:82px;border-left:1px solid var(--border)}
+.metric:first-child{border-left:0}
+.metric .n{font:700 17px/1 var(--mono);color:#d6e5ef}
+.metric.major .n{color:var(--gold)}
+.metric .l{margin-top:5px;font:9px/1 var(--mono);letter-spacing:.1em;color:var(--dim2)}
+.feed-rule{max-width:940px;margin:0 auto 12px;height:1px;background:linear-gradient(90deg,var(--border2),var(--border),transparent)}
+#feed{max-width:940px;margin:0 auto;display:flex;flex-direction:column;gap:11px}
+.feed-empty{padding:54px 20px;border:1px dashed #20384b;background:#08131d;text-align:center;color:var(--dim2)}
+.feed-empty-code{font:700 10px/1 var(--mono);letter-spacing:.16em;color:#54758b}
+.feed-empty-text{margin-top:11px;font-size:12px;color:#6f8598}
+.setupband{
+  max-width:940px;margin:0 auto 10px;padding:10px 12px;border:1px solid #5a492d;border-radius:3px;
+  background:#17150f;color:#cdb378;font-size:12px;display:flex;align-items:center;gap:10px;
+}
+.setupband::before{content:'AI';font:700 9px/1 var(--mono);letter-spacing:.1em;color:var(--gold);border:1px solid #5a492d;padding:4px 5px}
+.setupband .sbtn{margin-left:auto}
+
+/* high-priority brief */
+#alertZone{max-width:940px;margin:0 auto;padding:0}
+.alert{
+  position:relative;margin:0 0 8px;padding:11px 34px 11px 12px;display:flex;align-items:center;gap:10px;
+  border:1px solid #765d34;border-left:3px solid var(--gold);border-radius:3px;background:#18150f;cursor:pointer;animation:none;
+}
+.alert.lv5{border-color:#74403c;border-left-color:var(--hot);background:#1a1113}
+.alert .tag{padding:3px 6px;border-radius:2px;background:#302816;color:#e5c17b;font:700 9px/1 var(--mono);letter-spacing:.08em}
+.alert.lv5 .tag{background:#351c1e;color:#e6a29c}
+.alert .t{font-size:12.5px;font-weight:650;color:#d8e1e8}
+.alert .x{position:absolute;right:10px;color:var(--dim2);font-size:14px}
+
+/* compact intelligence cards */
+.card{
+  position:relative;padding:12px 14px 0;background:var(--card);border:1px solid #2a4358;border-left:3px solid #365a73;
+  border-radius:4px;box-shadow:0 5px 15px #0003,0 0 0 1px #07101a;animation:cardIn .2s ease-out;
+  overflow:hidden;transition:border-color .15s,background .15s,box-shadow .15s;
+}
+@keyframes cardIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.card:hover{background:var(--card-hover);border-color:#3b617c;box-shadow:0 7px 20px #0005,0 0 0 1px #0b1621}
+.card.is-new{animation:newIntelPop .52s cubic-bezier(.2,.82,.25,1)}
+.card.is-new::before{
+  content:'';position:absolute;z-index:2;inset:0 auto 0 0;width:3px;background:var(--accent);
+  box-shadow:0 0 14px #63b9df66;animation:newIntelSignal 1.45s ease-out both;pointer-events:none;
+}
+@keyframes newIntelPop{
+  0%{opacity:0;transform:translateY(-18px) scale(.975);box-shadow:0 0 0 #0000}
+  58%{opacity:1;transform:translateY(2px) scale(1.004);box-shadow:0 12px 34px #0007}
+  100%{transform:none}
+}
+@keyframes newIntelSignal{0%,35%{opacity:1}100%{opacity:0}}
+.card.lv4{border-color:#4e432c;border-left:3px solid var(--gold);background:#101711}
+.card.lv5{border-color:#5e3434;border-left:3px solid var(--hot);background:#151113}
+.card.lv4::after,.card.lv5::after{position:absolute;right:12px;top:10px;font:700 8px/1 var(--mono);letter-spacing:.12em}
+.card.lv4::after{content:'PRIORITY 04';color:#9c804b}
+.card.lv5::after{content:'PRIORITY 05';color:#aa5f5a}
+.card.lv4 .meta,.card.lv5 .meta{padding-right:84px}
+.card .meta{display:flex;align-items:center;gap:7px;margin-bottom:6px;color:var(--dim2);font-size:10.5px}
+.card .meta .time{font-family:var(--mono);color:#72879a}
+.card .meta .src{padding:2px 5px;border:1px solid #274057;border-radius:2px;color:#89a5b9;background:#0b1a27}
+.badge-new{padding:2px 5px;border-radius:2px;background:#173448;color:#8bc9e4;font:700 8px/1 var(--mono);letter-spacing:.08em;animation:none}
+.card .title{font-size:14px;font-weight:650;line-height:1.5;color:#dbe6ed;cursor:pointer;padding-right:4px}
+.card.lv4 .title{color:#e2d2ae}.card.lv5 .title{color:#e6c0bd}
+.card .body{margin-top:4px;color:#8fa4b7;font-size:12.5px;line-height:1.55;-webkit-line-clamp:2}
+.card .srclink{font:9px/1 var(--mono);letter-spacing:.08em;color:#557188;text-decoration:none;text-transform:uppercase}
+.card .srclink:hover{color:var(--accent)}
+.airow{
+  margin:10px -14px 0;padding:10px 14px 12px;background:var(--ai-panel);
+  border-top:1px solid #274158;font-size:12px;box-shadow:inset 0 1px 0 #07101a;
+}
+.airow::before{content:'AI INTELLIGENCE';display:block;margin-bottom:7px;font:700 8px/1 var(--mono);letter-spacing:.14em;color:#527b95}
+.ai-wait{color:var(--dim);font-size:11.5px}.ai-wait::after{animation:statusPulse 1.2s infinite}
+.alink{color:var(--accent);font-size:11.5px;text-decoration:none;border-bottom:1px solid #3d7692}
+.brow{display:flex;flex-wrap:wrap;gap:5px 7px;align-items:center}
+.bdg{padding:3px 7px;border-radius:2px;font:700 10px/1.1 var(--mono);letter-spacing:.04em}
+.bdg.good{background:#10271f;color:#78c3a0;border:1px solid #285544}
+.bdg.bad{background:#2a1718;color:#dd8e88;border:1px solid #60383a}
+.bdg.flat{background:#18222d;color:#91a2b1;border:1px solid #314354}
+.mini{color:#71869a;font-size:10.5px}.mini b{color:#b7c7d3;font-weight:600}
+.lvl{display:inline-flex;gap:2px}.lvl i{width:7px;height:7px;background:#223648;border-radius:0}
+.lvl i.on{background:#5c9fbe}.lvl.hi i.on{background:#b89555}.lvl.xhi i.on{background:#bd6b65}
+.cat,.pin,.deep,.coin{border-radius:2px;font-size:9.5px;padding:2px 6px}
+.cat{background:#142537;color:#88a9c1;border:1px solid #28445d}
+.pin{background:#292317;color:#c4a966;border:1px solid #574827}
+.deep{color:#b79bce;background:#21192b;border:1px solid #4d3c5e}
+.coin{background:#0d2230;color:#78b9d4;border:1px solid #25475b;font-family:var(--mono);font-weight:700}
+.why{margin-top:8px;padding-left:10px;border-left:1px solid #31506a;color:#aebfcb;line-height:1.6;font-size:11.5px}
+.why::before{content:'核心判断  ';font:700 9px/1 var(--mono);letter-spacing:.06em;color:#668ba3}
+.rev{margin-top:6px;color:#ae9668;font-size:10.5px}
+
+/* right-side intelligence modules */
+.side-panel{margin-bottom:14px;border:1px solid var(--border);background:#09141f}
+.side-panel-head{padding:10px 11px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.side-panel-title{font-size:11.5px;font-weight:650;color:#bacbd7}
+.side-panel-code{font:8px/1 var(--mono);letter-spacing:.12em;color:var(--dim2)}
+.priority-feed{padding:5px}
+.priority-empty{padding:20px 10px;text-align:center;color:var(--dim2);font-size:11px;line-height:1.6}
+.priority-item{width:100%;display:block;text-align:left;padding:9px;border:0;border-bottom:1px solid #172737;background:transparent;color:inherit;cursor:pointer}
+.priority-item:last-child{border-bottom:0}
+.priority-item:hover{background:#0d1b28}
+.priority-meta{display:flex;align-items:center;gap:6px;font:9px/1 var(--mono);color:#6e8497}
+.priority-level{color:var(--gold)}
+.priority-title{margin-top:6px;font-size:11.5px;font-weight:600;line-height:1.45;color:#bfcdd7}
+.macro-event{width:100%;padding:13px 12px;border:0;background:transparent;color:inherit;text-align:left;cursor:pointer}
+.macro-event::before{content:'NEXT MACRO EVENT';display:block;margin-bottom:8px;font:8px/1 var(--mono);letter-spacing:.12em;color:#8a7349}
+#nextEvt{font-size:12px;color:#d1b574;border:0;background:transparent;border-radius:0;white-space:normal}
+#nextEvt.soon{color:#e4a29d;background:#1a1113;border:0;animation:none}
+.state-list{padding:9px 11px;display:grid;gap:9px}
+.state-row{display:flex;justify-content:space-between;gap:12px;color:var(--dim);font-size:10.5px}
+.state-value{font-family:var(--mono);color:#a8bbc9;text-align:right}
+.state-value.online{color:var(--up)}
+.footnote{position:static;margin-top:auto;padding:14px 4px 0;border:0;background:transparent;text-align:left;color:#41566a;font-size:9.5px;line-height:1.55}
+
+/* restrained modal system */
+#overlay{background:#02060bd9}
+.modal{width:680px;max-width:94vw;max-height:88vh;padding-bottom:18px;border:1px solid #2b465d;border-radius:3px;background:var(--modal-bg);box-shadow:0 28px 80px #000b}
+.mhead{padding:14px 18px;border-bottom:1px solid var(--border2);background:var(--modal-head);font-size:13px;letter-spacing:.03em}
+.dclose{color:var(--dim);font-size:17px}.dclose:hover{color:#fff}
+.msec{padding:16px 18px 0}.msec h4{margin-bottom:11px;color:#6ea7c2;font:700 9px/1 var(--mono);letter-spacing:.15em}
+.frow{gap:9px;margin-bottom:9px;font-size:12px}.frow label{color:#7f95a8;font-size:11.5px}
+.frow input[type=text],.frow input[type=password],.frow input[type=number],.frow select,.frow input[type=datetime-local]{padding:8px 9px;border:1px solid var(--border);border-radius:2px;background:#08131e;color:#c7d7e2}
+.model-field{display:flex;flex:1;min-width:220px;gap:7px}
+.model-field input{min-width:0}
+.model-field .sbtn{flex:none;white-space:nowrap}
+.model-detect-status{margin:-2px 0 10px 98px;font-size:10.5px;color:var(--dim2);line-height:1.45}
+.model-detect-status.loading{color:#79a9c1}
+.model-detect-status.ok{color:var(--up)}
+.model-detect-status.bad{color:var(--down)}
+.note{color:var(--dim2);font-size:10.5px}
+.pbtn{padding:9px 18px;border:1px solid #50819a;border-radius:2px;background:#18384a;color:#c9e5f2;font-size:12px}
+.sbtn{padding:7px 11px;border:1px solid var(--border2);border-radius:2px;background:#0c1925;color:#a9bdcc;font-size:11px}
+.sbtn:hover{border-color:#507b94}
+.sbtn.danger{border-color:#633c3c;color:#d88b84;background:#1b1214}
+.sbtn.danger:hover{border-color:#9c554f;color:#f0aaa4}
+.evrow{border-bottom-color:var(--border);font-size:12px}.evrow .cd{color:var(--gold)}
+
+/* manually selected daylight theme */
+html[data-theme="light"]{
+  --bg:#e9eff4;--panel:#f5f8fa;--panel2:#edf3f7;--panel3:#e5edf3;
+  --border:#c8d5df;--border2:#9eb6c7;--text:#203443;--dim:#627989;--dim2:#8296a4;
+  --accent:#246f96;--accent-soft:#d8eaf3;--gold:#9a6c20;--gold-soft:#f2e7cf;
+  --hot:#a84943;--up:#287b5b;--down:#b64e47;--topbar:#f7fafce8;--rail:#f3f7faeb;
+  --main:#eaf0f4cc;--card:#fbfdfe;--card-hover:#ffffff;--ai-panel:#edf4f8;
+  --control:#ffffff;--modal-bg:#f7fafc;--modal-head:#edf3f7;color-scheme:light;
+}
+html[data-theme="light"] body{
+  background-image:linear-gradient(#6f87930e 1px,transparent 1px),linear-gradient(90deg,#6f87930d 1px,transparent 1px);
+}
+html[data-theme="light"] ::-webkit-scrollbar-thumb{background:#aebfcb}
+html[data-theme="light"] .topbar{box-shadow:0 8px 24px #34506316}
+html[data-theme="light"] .brandmark{border-color:#7295aa;background:#e5f0f5;box-shadow:inset 0 0 0 3px #f7fafc}
+html[data-theme="light"] .brandname,html[data-theme="light"] .desk-title{color:#173043}
+html[data-theme="light"] .status-pill,html[data-theme="light"] .metric-grid{background:#f7fafc}
+html[data-theme="light"] .hbtn{background:#f7fafc;color:#405d70}
+html[data-theme="light"] .hbtn:hover{background:#e6f0f5;color:#173b51}
+html[data-theme="light"] .hbtn.primary{background:#f6eddb;border-color:#c7a66a;color:#735019}
+html[data-theme="light"] select.hsel,html[data-theme="light"] input.hin{color:#294354}
+html[data-theme="light"] select.hsel:focus,html[data-theme="light"] input.hin:focus{background:#fff}
+html[data-theme="light"] .srcdots span.ok{color:#315f51;background:#e6f1ed}
+html[data-theme="light"] .srcdots span.bad{color:#8b4d48;background:#f5e9e7}
+html[data-theme="light"] .metric .n{color:#203d50}
+html[data-theme="light"] .feed-empty{background:#f7fafc;border-color:#aebfcb}
+html[data-theme="light"] .setupband{background:#f6eddb;color:#79571c;border-color:#c7a66a}
+html[data-theme="light"] .alert{background:#f7eedc}
+html[data-theme="light"] .alert.lv5{background:#f5e4e3}
+html[data-theme="light"] .alert .t{color:#4f3d1e}
+html[data-theme="light"] .card{
+  border-color:#9fb5c4;border-left-color:#547f99;box-shadow:0 5px 14px #34506316,0 0 0 1px #fff;
+}
+html[data-theme="light"] .card:hover{border-color:#648da6;box-shadow:0 8px 20px #34506324,0 0 0 1px #fff}
+html[data-theme="light"] .card.lv4{background:#fffdf7;border-color:#bda771;border-left-color:var(--gold)}
+html[data-theme="light"] .card.lv5{background:#fff9f8;border-color:#c99591;border-left-color:var(--hot)}
+html[data-theme="light"] .card .title{color:#233b4b}
+html[data-theme="light"] .card.lv4 .title{color:#664d20}
+html[data-theme="light"] .card.lv5 .title{color:#713b38}
+html[data-theme="light"] .card .body{color:#5f7585}
+html[data-theme="light"] .card .meta .time{color:#6a8291}
+html[data-theme="light"] .card .meta .src{color:#416b83;background:#e8f1f6;border-color:#b7cbd7}
+html[data-theme="light"] .badge-new{background:#d6ebf5;color:#1e688d}
+html[data-theme="light"] .airow{border-top-color:#b9ccd8;box-shadow:inset 0 1px 0 #fff}
+html[data-theme="light"] .airow::before{color:#3c718e}
+html[data-theme="light"] .bdg.good{background:#e2f1ea;color:#287153;border-color:#9fc8b7}
+html[data-theme="light"] .bdg.bad{background:#f7e5e3;color:#a3443e;border-color:#d8aaa6}
+html[data-theme="light"] .bdg.flat{background:#e5edf2;color:#526a7b;border-color:#b9c9d3}
+html[data-theme="light"] .cat{background:#dfeaf1;color:#42667e;border-color:#b2c7d4}
+html[data-theme="light"] .pin{background:#f2e8d3;color:#826022;border-color:#d1bb8c}
+html[data-theme="light"] .deep{background:#eee7f2;color:#735986;border-color:#c8b6d2}
+html[data-theme="light"] .coin{background:#dcecf3;color:#256885;border-color:#a9c9d7}
+html[data-theme="light"] .why{color:#405b6c;border-left-color:#83a5ba}
+html[data-theme="light"] .rev{color:#826427}
+html[data-theme="light"] .side-panel{background:#f8fafb}
+html[data-theme="light"] .side-panel-title,html[data-theme="light"] .priority-title{color:#304b5c}
+html[data-theme="light"] .priority-item{border-bottom-color:#d2dde4}
+html[data-theme="light"] .priority-item:hover{background:#eaf2f6}
+html[data-theme="light"] #nextEvt{color:#8a621e}
+html[data-theme="light"] #nextEvt.soon{background:#f5e4e3;color:#a84943}
+html[data-theme="light"] #overlay{background:#16232f99}
+html[data-theme="light"] .modal{border-color:#9eb6c7;box-shadow:0 28px 70px #243b4c4d}
+html[data-theme="light"] .dclose:hover{color:#243b4c}
+html[data-theme="light"] .frow input[type=text],html[data-theme="light"] .frow input[type=password],html[data-theme="light"] .frow input[type=number],html[data-theme="light"] .frow select,html[data-theme="light"] .frow input[type=datetime-local]{background:#fff;color:#2c4657}
+html[data-theme="light"] .sbtn{background:#edf3f7;color:#456173}
+html[data-theme="light"] .sbtn.danger{background:#f7e7e5;color:#9e433d;border-color:#d4a39f}
+html[data-theme="light"] .pbtn{background:#dcecf4;color:#24536b;border-color:#76a1b6}
+
+@media (prefers-reduced-motion:reduce){
+  .card,.card.is-new,.card.is-new::before,.livedot{animation:none!important}
+}
+
+@media (max-width:1180px){
+  .workspace{grid-template-columns:214px minmax(520px,1fr)}
+  .right-rail{display:none}
+  .brand{min-width:214px}
+}
+@media (max-width:820px){
+  body{overflow:auto;display:block}
+  .topbar{min-height:auto;padding:12px 14px;gap:10px;flex-wrap:wrap}
+  .brand{min-width:0;flex:1}.brandsub{display:none}.top-status{order:3;width:100%}.sync-time{margin-left:auto}
+  .workspace{display:block}.left-rail{border-right:0;border-bottom:1px solid var(--border);padding:13px 14px}
+  .left-rail .rail-block:first-child{margin-bottom:10px;padding-bottom:10px}
+  .filter-stack{grid-template-columns:1fr 1fr}.control-label:last-child{grid-column:1/-1}
+  .left-rail .rail-block:nth-child(2),.left-rail .footnote{display:none}
+  main#main{overflow:visible;padding:16px 12px 44px}
+  .desk-head{display:block}.metric-grid{margin:12px 0 0;width:100%}.metric{text-align:center}
+}
+@media (max-width:520px){
+  .top-actions{width:100%;margin-left:0}.hbtn{flex:1}.btn-code{display:none}
+  .filter-stack{grid-template-columns:1fr}.control-label:last-child{grid-column:auto}
+  .desk-title{font-size:18px}.metric .n{font-size:15px}
+  .card{padding:10px 10px 0}.card .airow{margin:10px -10px 0;padding:10px 10px 11px}.card.lv4::after,.card.lv5::after{display:none}.card.lv4 .meta,.card.lv5 .meta{padding-right:0}
+  .model-detect-status{margin-left:0}
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brandmark">CI</span>
+    <span class="brandcopy">
+      <span class="brandname">币圈新闻监控台</span>
+      <span class="brandsub">CRYPTO INTELLIGENCE DESK</span>
+    </span>
+  </div>
+  <div class="top-status">
+    <span class="status-pill"><i class="livedot" id="liveDot"></i>实时聚合</span>
+    <span class="sync-time" id="lastSync">等待首轮同步</span>
+  </div>
+  <div class="top-actions">
+    <button class="hbtn primary" id="btnCal"><span class="btn-code">CAL</span>宏观日历</button>
+    <button class="hbtn" id="btnSound" title="声音告警开关"><span class="btn-code">SND</span>声音</button>
+    <button class="hbtn" id="btnTheme" title="切换日间或夜间模式" aria-pressed="false"><span class="btn-code">THEME</span><span id="themeLabel">夜间</span></button>
+    <button class="hbtn" id="btnSet"><span class="btn-code">CFG</span>设置</button>
+  </div>
+</header>
+
+<div class="workspace">
+  <aside class="left-rail" aria-label="情报筛选与信源状态">
+    <section class="rail-block">
+      <div class="eyebrow">Intelligence filters</div>
+      <h2 class="rail-heading">情报筛选</h2>
+      <div class="filter-stack">
+        <label class="control-label">影响级别
+          <select class="hsel" id="fLevel" title="按影响等级过滤">
+            <option value="1">全部等级</option><option value="2">≥ 2 级</option><option value="3">≥ 3 级</option><option value="4">≥ 4 级 · 重大</option>
+          </select>
+        </label>
+        <label class="control-label">影响方向
+          <select class="hsel" id="fDir" title="按影响方向过滤">
+            <option value="">方向不限</option><option value="利好">只看正面</option><option value="利空">只看负面</option>
+          </select>
+        </label>
+        <label class="control-label">关键词检索
+          <input class="hin" id="fKw" placeholder="标题或正文关键词…">
+        </label>
+      </div>
+    </section>
+    <section class="rail-block">
+      <div class="eyebrow">Source network</div>
+      <h2 class="rail-heading">信源网络</h2>
+      <div class="srcdots" id="srcDots"></div>
+    </section>
+    <section class="rail-block rail-note">
+      <div class="eyebrow">Desk protocol</div>
+      <p style="margin-top:10px"><strong>重大优先：</strong>AI 评级达到 4–5 级的新闻自动提升至情报流顶部，并进入右侧重大情报队列。</p>
+    </section>
+    <div class="footnote">AI 解读仅供信息研判，不构成投资建议</div>
+  </aside>
+
+  <main id="main">
+    <div class="desk-head">
+      <div>
+        <div class="eyebrow">Live intelligence stream</div>
+        <h1 class="desk-title">实时情报流</h1>
+        <p class="desk-sub">跨信源聚合 · 自动去重 · AI 影响研判</p>
+      </div>
+      <div class="metric-grid" aria-label="情报概览">
+        <div class="metric"><div class="n" id="metricTotal">0</div><div class="l">当前情报</div></div>
+        <div class="metric major"><div class="n" id="metricMajor">0</div><div class="l">重大情报</div></div>
+        <div class="metric"><div class="n" id="metricSources">0</div><div class="l">在线信源</div></div>
+      </div>
+    </div>
+    <div class="feed-rule"></div>
+    <div id="setupBand" class="setupband" style="display:none">
+      尚未配置 AI API Key，新闻仍会正常滚动，但不会自动分析。
+      <button class="sbtn" onclick="openModal('settingsModal')">配置 AI</button>
+    </div>
+    <div id="alertZone"></div>
+    <div id="feed"><div class="feed-empty" id="feedEmpty"><div class="feed-empty-code">INITIALIZING INTELLIGENCE FEED</div><div class="feed-empty-text">正在连接新闻源并建立实时情报流…</div></div></div>
+  </main>
+
+  <aside class="right-rail" aria-label="重大情报与系统状态">
+    <section class="side-panel">
+      <div class="side-panel-head"><span class="side-panel-title">重大情报</span><span class="side-panel-code">PRIORITY QUEUE</span></div>
+      <div class="priority-feed" id="priorityFeed"><div class="priority-empty">正在等待高影响情报<br>4–5 级新闻将自动进入此处</div></div>
+    </section>
+    <section class="side-panel">
+      <div class="side-panel-head"><span class="side-panel-title">宏观窗口</span><span class="side-panel-code">EVENT CLOCK</span></div>
+      <button class="macro-event" id="nextEvt" title="点击打开宏观日历"></button>
+    </section>
+    <section class="side-panel">
+      <div class="side-panel-head"><span class="side-panel-title">系统状态</span><span class="side-panel-code">DESK STATUS</span></div>
+      <div class="state-list">
+        <div class="state-row"><span>AI 分析</span><span class="state-value" id="aiState">待检测</span></div>
+        <div class="state-row"><span>当前模型</span><span class="state-value" id="aiModel">—</span></div>
+        <div class="state-row"><span>轮询周期</span><span class="state-value" id="pollState">30 SEC</span></div>
+        <div class="state-row"><span>深度复核</span><span class="state-value" id="deepState">OFF</span></div>
+      </div>
+    </section>
+  </aside>
+</div>
+
+<div id="overlay" onclick="closeAll()"></div>
+
+<!-- 设置 -->
+<div class="modal" id="settingsModal">
+  <div class="mhead">系统设置 <span class="side-panel-code" style="margin-left:8px">DESK CONFIGURATION</span><span class="spacer"></span><button class="dclose" onclick="closeAll()">✕</button></div>
+  <div id="setBody"></div>
+</div>
+
+<!-- 宏观日历 -->
+<div class="modal" id="calendarModal">
+  <div class="mhead">宏观事件日历 <span class="side-panel-code" style="margin-left:8px">MACRO CALENDAR</span><span class="spacer"></span><button class="dclose" onclick="closeAll()">✕</button></div>
+  <div class="msec">
+    <p class="note">已预填 2026 年官方日程(FOMC 决议 / 美国 CPI / 非农),时间已换算为你的本地时区。可自行增删。</p>
+    <div id="evList"></div>
+    <div class="frow" style="margin-top:12px">
+      <input type="text" id="evName" placeholder="事件名称" style="flex:1">
+      <input type="datetime-local" id="evTime">
+      <button class="sbtn" id="btnAddEv">添加</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+/* ================= 基础工具 ================= */
+const $=s=>document.querySelector(s);
+const P=u=>'/p?u='+encodeURIComponent(u);
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const safeLink=u=>{try{const x=new URL(String(u||''),location.href);return /^(https?):$/.test(x.protocol)?x.href:'#'}catch(e){return'#'}};
+const strip=h=>String(h??'').replace(/<[^>]*>/g,' ').replace(/&nbsp;/gi,' ').replace(/&amp;/gi,'&')
+  .replace(/&quot;/gi,'"').replace(/&#39;/gi,"'").replace(/&lt;/gi,'<').replace(/&gt;/gi,'>')
+  .replace(/\s+/g,' ').trim();
+const p2=n=>String(n).padStart(2,'0');
+const fmtT=ms=>{const d=new Date(+ms);return `${p2(d.getMonth()+1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}`};
+async function gj(url,opt){const r=await fetch(P(url),opt);const t=await r.text();let j;try{j=JSON.parse(t)}catch(e){throw new Error('响应非JSON: '+t.slice(0,120))}
+  if(!r.ok){throw new Error((j&&(j.error?.message||j.msg||j.error))||('HTTP '+r.status))}
+  if(j&&j.code!==undefined&&j.msg&&j.code!==0&&j.code!==200&&j.code!=='000000'&&!Array.isArray(j))throw new Error(j.msg);
+  return j;}
+
+/* ================= 设置 ================= */
+const STORAGE_KEYS={settings:'crypto_intel_oss_v1_settings',events:'crypto_intel_oss_v1_events'};
+const DEF_SETTINGS={
+  provider:'deepseek',
+  prov:{deepseek:{},anthropic:{},openai:{},gemini:{},grok:{},custom:{}},
+  deep:false, deepProvider:'anthropic',
+  pollSec:30, sound:true, theme:'dark',
+  srcOn:{jinse:false,blockbeats:false,panews:true,binance:true,odaily:true,ctcn:true,techflow:true,catcher:true},
+  srcUrl:{}
+};
+let S;
+function loadS(){try{S=Object.assign({},DEF_SETTINGS,JSON.parse(localStorage.getItem(STORAGE_KEYS.settings)||'{}'));}catch(e){S=Object.assign({},DEF_SETTINGS)}
+  S.prov=Object.assign({},DEF_SETTINGS.prov,S.prov);S.srcOn=Object.assign({},DEF_SETTINGS.srcOn,S.srcOn);S.srcUrl=S.srcUrl||{};
+  S.theme=S.theme==='light'?'light':'dark';}
+function saveS(){localStorage.setItem(STORAGE_KEYS.settings,JSON.stringify(S));}
+function applyTheme(){
+  const theme=S&&S.theme==='light'?'light':'dark',current=theme==='dark'?'夜间':'日间',next=theme==='dark'?'日间':'夜间';
+  document.documentElement.dataset.theme=theme;
+  const label=$('#themeLabel'),btn=$('#btnTheme');
+  if(label)label.textContent=current;
+  if(btn){btn.title=`当前为${theme==='dark'?'夜间':'日间'}模式，点击切换至${next}模式`;btn.setAttribute('aria-label',btn.title);btn.setAttribute('aria-pressed',theme==='light'?'true':'false');}
+}
+
+/* ================= AI 服务商 ================= */
+const PROVIDERS={
+  deepseek:{name:'DeepSeek(推荐,便宜)',kind:'openai',base:'https://api.deepseek.com/v1',model:'deepseek-chat'},
+  anthropic:{name:'Claude',kind:'anthropic',base:'https://api.anthropic.com/v1',model:'claude-sonnet-4-5'},
+  openai:{name:'OpenAI',kind:'openai',base:'https://api.openai.com/v1',model:'gpt-4o-mini'},
+  gemini:{name:'Gemini',kind:'gemini',base:'https://generativelanguage.googleapis.com/v1beta',model:'gemini-2.0-flash'},
+  grok:{name:'Grok (xAI)',kind:'openai',base:'https://api.x.ai/v1',model:'grok-3-mini'},
+  custom:{name:'自定义(OpenAI兼容)',kind:'openai',base:'',model:''}
+};
+function provConf(id){const p=PROVIDERS[id],u=S.prov[id]||{};
+  return{id,kind:p.kind,base:(u.base||p.base).replace(/\/+$/,''),key:u.key||'',model:u.model||p.model}}
+function hasKey(){return !!provConf(S.provider).key}
+
+/* ================= 模型自动检测 ================= */
+let modelDetectTimer=null,modelDetectSeq=0;
+
+function modelListRequest(id,key,base){
+  const p=PROVIDERS[id];
+  if(!base)throw new Error('missing_base');
+  if(p.kind==='anthropic')return gj(base+'/models?limit=1000',{headers:{'x-api-key':key,'anthropic-version':'2023-06-01'}});
+  if(p.kind==='gemini')return gj(base+'/models?pageSize=1000',{headers:{'x-goog-api-key':key}});
+  return gj(base+'/models',{headers:{authorization:'Bearer '+key}});
+}
+
+function normalizeModelList(id,j){
+  const p=PROVIDERS[id];
+  let rows=p.kind==='gemini'?(j.models||[]):(j.data||[]);
+  if(p.kind==='gemini')rows=rows.filter(x=>!x.supportedGenerationMethods||x.supportedGenerationMethods.includes('generateContent'));
+  let ids=rows.map(x=>String(x.id||x.name||'').replace(/^models\//,'').trim()).filter(Boolean);
+  const nonText=/(embedding|moderation|whisper|tts|speech|transcri|audio|realtime|image|dall|sora|video|rerank|ocr)/i;
+  if(id==='openai'||id==='grok'||id==='custom')ids=ids.filter(x=>!nonText.test(x));
+  return [...new Set(ids)];
+}
+
+function chooseDetectedModel(id,models,current){
+  if(current&&models.includes(current))return current;
+  const fallback=PROVIDERS[id].model;
+  if(fallback&&models.includes(fallback))return fallback;
+  const prefs={
+    deepseek:[/flash/i,/chat/i,/pro/i,/reasoner/i],
+    anthropic:[/sonnet/i,/haiku/i,/opus/i,/claude/i],
+    openai:[/^gpt-[\d.]+-mini$/i,/^gpt-[\d.]+$/i,/^gpt-/i,/chat/i],
+    gemini:[/flash/i,/pro/i,/gemini/i],
+    grok:[/mini/i,/grok/i],
+    custom:[/chat/i,/instruct/i,/gpt/i,/claude/i,/gemini/i]
+  };
+  for(const re of (prefs[id]||prefs.custom)){const hit=models.find(x=>re.test(x));if(hit)return hit}
+  return models[0]||'';
+}
+
+function safeModelDetectError(e){
+  const m=String(e&&e.message||'');
+  if(/401|403|unauthor|forbidden|credential|api.?key/i.test(m))return'Key 无效，或没有读取模型列表的权限';
+  if(/404|not found/i.test(m))return'当前接口未提供模型列表，请手动填写模型名';
+  if(/missing_base/i.test(m))return'请先填写接口地址';
+  if(/响应非JSON/i.test(m))return'模型列表接口返回格式不兼容，请手动填写';
+  return'无法获取模型列表，请检查服务商、接口地址或网络';
+}
+
+function setModelDetectStatus(text,state=''){
+  const el=$('#modelDetectStatus');if(!el)return;
+  el.textContent=text;el.className='model-detect-status'+(state?' '+state:'');
+}
+
+async function detectCurrentModels(){
+  const id=S.provider,keyEl=$('#pKey'),modelEl=$('#pModel');
+  if(!keyEl||!modelEl)return;
+  const key=keyEl.value.trim();
+  if(key.length<8){setModelDetectStatus('输入 API Key 后自动检测可用模型');return}
+  const p=PROVIDERS[id],u=S.prov[id]||{};
+  const base=(($('#pBase')&&$('#pBase').value.trim())||u.base||p.base||'').replace(/\/+$/,'');
+  const seq=++modelDetectSeq,btn=$('#btnDetectModel');
+  if(btn)btn.disabled=true;
+  setModelDetectStatus('正在验证 Key 并读取可用模型…','loading');
+  try{
+    const j=await modelListRequest(id,key,base);
+    if(seq!==modelDetectSeq||S.provider!==id||!$('#pModel'))return;
+    const models=normalizeModelList(id,j);
+    if(!models.length)throw new Error('empty_models');
+    const list=$('#modelOptions');
+    if(list)list.innerHTML=models.map(x=>`<option value="${esc(x)}"></option>`).join('');
+    const picked=chooseDetectedModel(id,models,modelEl.value.trim());
+    modelEl.value=picked;
+    setModelDetectStatus(`已匹配 ${models.length} 个可用模型 · 当前选择 ${picked}`,'ok');
+  }catch(e){
+    if(seq===modelDetectSeq)setModelDetectStatus(safeModelDetectError(e),'bad');
+  }finally{
+    if(seq===modelDetectSeq&&$('#btnDetectModel'))$('#btnDetectModel').disabled=false;
+  }
+}
+
+function scheduleModelDetection(delay=700){
+  clearTimeout(modelDetectTimer);
+  modelDetectTimer=setTimeout(detectCurrentModels,delay);
+}
+
+/* ================= 新闻源 ================= */
+const SOURCES={
+  jinse:{name:'金色财经',
+    urls:['https://api.jinse.cn/noah/v2/lives?limit=30&reading=false&source=web&flag=down&id=0&category=0',
+          'https://api.jinse.com/noah/v2/lives?limit=30&reading=false&source=web&flag=down&id=0&category=0'],
+    parse(j){const arr=(j.list&&j.list[0]&&j.list[0].lives)||[];
+      return arr.map(x=>{const c=strip(x.content||'');const m=c.match(/^【(.{2,80}?)】\s*(.*)$/s);
+        return{id:'js'+x.id,time:(+x.created_at)*1000,title:m?m[1]:c.slice(0,60),body:m?m[2]:c,
+          url:x.link||('https://www.jinse.cn/lives/'+x.id+'.html'),src:'金色财经'}})}},
+  blockbeats:{name:'BlockBeats',
+    urls:['https://api.theblockbeats.news/v2/rss/newsflash',
+          'https://api.theblockbeats.news/v1/open-api/home-xml'],
+    parse(j){const d=j.data||{};const arr=d.data||d.list||(Array.isArray(d)?d:[]);
+      return arr.map(x=>{let t=x.create_time||x.add_time||x.created_at||0;
+        t=(typeof t==='string'&&t.includes('-'))?Date.parse(t.replace(' ','T')+'+08:00'):(+t)*(String(t).length<12?1000:1);
+        return{id:'bb'+(x.id||x.article_id||x.url),time:t,title:strip(x.title||''),body:strip(x.content||x.abstract||''),
+          url:x.link||x.url||'https://www.theblockbeats.info/newsflash',src:'BlockBeats'}})}},
+  panews:{name:'PANews',
+    urls:['https://rss.panewslab.com/zh/gtimg/rss',
+          'https://www.panewslab.com/webapi/flashnews?LId=1&Rn=30&tw=0'],
+    parse(j){let arr=[];const d=j.data;
+      if(Array.isArray(d))arr=d;
+      else if(d&&Array.isArray(d.flashNews))arr=d.flashNews.flatMap(g=>g.list||g.List||[]);
+      else if(d&&Array.isArray(d.list))arr=d.list;
+      return arr.map(x=>{let t=x.publishTime||x.publish_time||x.dateInfo||0;t=+t*(String(Math.floor(+t)).length<12?1000:1)||Date.now();
+        return{id:'pa'+(x.id||x.newsId||x.title),time:t,title:strip(x.title||''),body:strip(x.desc||x.description||x.content||''),
+          url:x.id?('https://www.panewslab.com/zh/newsflash/'+x.id):'https://www.panewslab.com/zh/newsflash',src:'PANews'}})}},
+  binance:{name:'币安公告',
+    urls:['https://www.binance.com/bapi/apex/v1/public/apex/cms/article/list/query?type=1&pageNo=1&pageSize=15&catalogId=48'],
+    parse(j){const arr=(j.data&&j.data.catalogs&&j.data.catalogs[0]&&j.data.catalogs[0].articles)||(j.data&&j.data.articles)||[];
+      return arr.map(a=>({id:'bn'+(a.code||a.id),time:+(a.releaseDate||a.releasedate||Date.now()),title:strip(a.title||''),body:'',
+        url:'https://www.binance.com/zh-CN/support/announcement/'+(a.code||''),src:'币安公告'}))}},
+  odaily:{name:'Odaily',
+    urls:['https://rss.odaily.news/rss/newsflash'],
+    parse(j){const d=j.data||{};const arr=d.items||d.list||d.arr||(Array.isArray(d)?d:[]);
+      return arr.map(x=>{let t=+x.published_at||0;if(t&&t<1e12)t*=1000;if(!t)t=Date.parse(x.published_at)||Date.now();
+        return{id:'od'+(x.id||x.title),time:t,title:strip(x.title||''),body:strip(x.description||x.content||''),
+          url:x.news_url||('https://www.odaily.news/newsflash/'+(x.id||'')),src:'Odaily'}})}},
+  ctcn:{name:'吴说',
+    urls:['https://wublockchain.substack.com/feed'],
+    parse(j){return[]}},
+  techflow:{name:'深潮',
+    urls:['https://www.techflowpost.com/api/client/newsflashes?page=1&page_size=30'],
+    parse(j){const arr=Array.isArray(j.data)?j.data:[];
+      return arr.map(x=>{let t=Date.parse(String(x.created_at||'').replace(' ','T'))||Date.now();
+        return{id:'tf'+x.id,time:t,title:strip(x.title||''),body:strip(x.abstract||''),
+          url:'https://www.techflowpost.com/zh-CN/newsletter/'+x.id,src:'深潮'}})}},
+  catcher:{name:'链捕手',
+    urls:['https://www.chaincatcher.com/rss/clist'],
+    parse(j){return[]}}
+};
+const workingUrl={};
+function candidates(k){
+  const custom=S.srcUrl&&S.srcUrl[k];
+  const list=custom?[custom]:SOURCES[k].urls.slice();
+  const w=workingUrl[k];
+  if(w&&list.includes(w)){list.splice(list.indexOf(w),1);list.unshift(w)}
+  return list;
+}
+function parseRSS(text,k){
+  const doc=new DOMParser().parseFromString(text,'text/xml');
+  if(doc.querySelector('parsererror'))throw new Error('RSS解析失败');
+  return[...doc.querySelectorAll('item')].slice(0,30).map(it=>{
+    const g=t=>{const e=it.getElementsByTagName(t)[0];return e?e.textContent:''};
+    const rawT=strip(g('title')),desc=strip(g('description'));
+    const m=rawT.match(/^【(.{2,80}?)】\s*(.*)$/s);
+    return{id:k+titleHash(rawT),time:Date.parse(g('pubDate'))||Date.now(),
+      title:m?m[1]:rawT,body:m?((m[2]+' '+desc).trim()):desc,
+      url:g('link')||'#',src:SOURCES[k].name}});
+}
+
+/* ================= 新闻状态 ================= */
+const NEWS=new Map();          // id -> item
+const seenTitle=new Set();     // 跨源去重
+let firstPoll=true, pollTimer=null;
+const titleHash=t=>strip(t).replace(/[\s\p{P}]/gu,'').slice(0,42);
+const itemHash=value=>{let h=2166136261;for(const ch of String(value)){h^=ch.codePointAt(0);h=Math.imul(h,16777619)}return(h>>>0).toString(36)};
+
+function setHealth(k,ok,msg){const el=document.getElementById('sd_'+k);if(!el)return;
+  el.className=ok?'ok':'bad';el.title=SOURCES[k].name+(ok?' · 正常':' · 失败: '+(msg||''));updateDashboard()}
+function renderSrcDots(){$('#srcDots').innerHTML=Object.keys(SOURCES)
+  .filter(k=>S.srcOn[k])
+  .map(k=>`<span id="sd_${k}"><i></i>${SOURCES[k].name}</span>`).join('');updateDashboard()}
+
+async function fetchSource(k){
+  let lastErr='';
+  for(const u of candidates(k)){
+    try{
+      const r=await fetch(P(u));
+      const text=(await r.text()).trim();
+      if(!r.ok)throw new Error('HTTP '+r.status+' '+text.slice(0,80));
+      let items;
+      if(text.startsWith('<'))items=parseRSS(text,k);
+      else{
+        const j=JSON.parse(text);
+        if(j&&j.error)throw new Error(String(j.error).slice(0,100));
+        items=SOURCES[k].parse(j)||[];
+      }
+      items=items.filter(x=>x.title&&x.time>0);
+      if(!items.length)throw new Error('返回为空或格式已变更');
+      workingUrl[k]=u;setHealth(k,true);return items;
+    }catch(e){lastErr=e.message}
+  }
+  setHealth(k,false,lastErr);return[];
+}
+
+async function pollAll(){
+  const keys=Object.keys(SOURCES).filter(k=>S.srcOn[k]);
+  const res=await Promise.all(keys.map(fetchSource));
+  let items=res.flat().sort((a,b)=>a.time-b.time);   // 旧->新,保证 prepend 后最新在顶
+  const fresh=[];
+  for(const it of items){
+    it.id='n'+itemHash(`${it.src}|${it.id}|${it.title}`); // 外部数据不直接进入 DOM id
+    if(NEWS.has(it.id))continue;
+    const th=titleHash(it.title);
+    if(seenTitle.has(th))continue;
+    seenTitle.add(th);NEWS.set(it.id,it);fresh.push(it);
+  }
+  if(fresh.length){
+    for(const it of fresh)renderCard(it,!firstPoll);
+    // 首次加载只分析最新5条,后续新增全部分析
+    const toAnalyze=firstPoll?fresh.slice(-5):fresh;
+    for(const it of toAnalyze)queueAnalysis(it);
+    trimFeed();sortFeed();applyFilters();
+  }
+  firstPoll=false;
+  $('#liveDot').style.background='var(--up)';
+  updateDashboard(true);
+}
+
+function trimFeed(){
+  const f=$('#feed');
+  while(f.children.length>120){
+    const el=f.lastChild;
+    if(el.dataset&&el.dataset.id)NEWS.delete(el.dataset.id);
+    f.removeChild(el);
+  }
+  if(seenTitle.size>1500){
+    const keep=[...seenTitle].slice(-800);
+    seenTitle.clear();keep.forEach(x=>seenTitle.add(x));
+  }
+}
+
+function sortFeed(){
+  const feed=$('#feed');
+  [...feed.children].sort((a,b)=>{
+    const ia=NEWS.get(a.dataset.id),ib=NEWS.get(b.dataset.id);
+    const pa=ia&&ia.ai&&ia.ai.level>=4?1:0,pb=ib&&ib.ai&&ib.ai.level>=4?1:0;
+    if(pa!==pb)return pb-pa;
+    return (ib?ib.time:0)-(ia?ia.time:0);
+  }).forEach(el=>feed.appendChild(el));
+}
+
+function renderPriority(){
+  const box=$('#priorityFeed');if(!box)return;
+  const items=[...NEWS.values()].filter(it=>it.ai&&it.ai.level>=4)
+    .sort((a,b)=>b.ai.level-a.ai.level||b.time-a.time).slice(0,5);
+  if(!items.length){box.innerHTML='<div class="priority-empty">正在等待高影响情报<br>4–5 级新闻将自动进入此处</div>';return}
+  box.innerHTML=items.map(it=>`<button class="priority-item" data-id="${esc(it.id)}">
+    <span class="priority-meta"><span class="priority-level">L${it.ai.level}</span><span>${fmtT(it.time)}</span><span>${esc(it.src)}</span></span>
+    <span class="priority-title">${esc(it.title)}</span></button>`).join('');
+  box.querySelectorAll('.priority-item').forEach(el=>el.onclick=()=>{
+    const card=document.getElementById('c_'+el.dataset.id);if(card){card.scrollIntoView({behavior:'smooth',block:'center'});card.style.borderColor='var(--gold)'}
+  });
+}
+
+function updateDashboard(markSync=false){
+  const items=[...NEWS.values()];
+  const major=items.filter(it=>it.ai&&it.ai.level>=4).length;
+  if($('#metricTotal'))$('#metricTotal').textContent=items.length;
+  if($('#metricMajor'))$('#metricMajor').textContent=major;
+  if($('#metricSources'))$('#metricSources').textContent=document.querySelectorAll('#srcDots .ok').length;
+  if(markSync&&$('#lastSync'))$('#lastSync').textContent='同步 '+fmtT(Date.now());
+  renderPriority();
+}
+
+function refreshDeskState(){
+  const conf=provConf(S.provider),ready=!!conf.key;
+  if($('#aiState')){$('#aiState').textContent=ready?'ONLINE':'未配置';$('#aiState').className='state-value'+(ready?' online':'')}
+  if($('#aiModel'))$('#aiModel').textContent=conf.model||'—';
+  if($('#pollState'))$('#pollState').textContent=S.pollSec+' SEC';
+  if($('#deepState'))$('#deepState').textContent=S.deep?'ON':'OFF';
+  if($('#btnSound'))$('#btnSound').innerHTML=`<span class="btn-code">SND</span>${S.sound?'声音开启':'声音关闭'}`;
+}
+
+/* ================= 卡片渲染 ================= */
+function renderCard(it,isNew){
+  const empty=$('#feedEmpty');if(empty)empty.remove();
+  const el=document.createElement('div');
+  el.className='card'+(isNew?' is-new':'');el.id='c_'+it.id;el.dataset.id=it.id;
+  el.innerHTML=`
+    <div class="meta"><span class="time">${fmtT(it.time)}</span><span class="src">${esc(it.src)}</span>
+      ${isNew?'<span class="badge-new">NEW</span>':''}
+      <span class="spacer" style="flex:1"></span>
+      <a class="srclink" href="${esc(safeLink(it.url))}" target="_blank" rel="noopener noreferrer">原文 ↗</a></div>
+    <div class="title" onclick="this.parentElement.classList.toggle('open')">${esc(it.title)}</div>
+    ${it.body?`<div class="body" onclick="this.parentElement.classList.toggle('open')">${esc(it.body)}</div>`:''}
+    <div class="airow" id="ai_${it.id}">${hasKey()?'<span class="ai-wait">AI 分析中</span>':'<span class="mini">未配置 AI Key,<span class="alink" onclick="openModal(\'settingsModal\')">去设置</span>后可自动分析</span>'}</div>`;
+  $('#feed').prepend(el);
+}
+
+/* ================= 过滤 ================= */
+function applyFilters(){
+  const minLv=+$('#fLevel').value,dir=$('#fDir').value,kw=$('#fKw').value.trim().toLowerCase();
+  document.querySelectorAll('#feed .card').forEach(el=>{
+    const it=NEWS.get(el.dataset.id);if(!it){el.style.display='none';return}
+    let show=true;
+    if(it.ai){
+      if(it.ai.level<minLv)show=false;
+      if(dir&&it.ai.direction!==dir)show=false;
+    }else if(minLv>1||dir){show=(minLv<=1&&!dir)}   // 未分析的:只在无AI过滤条件时显示
+    if(kw&&!(it.title+it.body).toLowerCase().includes(kw))show=false;
+    el.style.display=show?'':'none';
+  });
+}
+
+/* ================= 声音告警 ================= */
+let AC=null;
+function beep(times=2){
+  if(!S.sound)return;
+  try{AC=AC||new(window.AudioContext||window.webkitAudioContext)();
+    if(AC.state==='suspended')AC.resume();
+    for(let i=0;i<times;i++){
+      const o=AC.createOscillator(),g=AC.createGain();
+      o.connect(g);g.connect(AC.destination);
+      o.frequency.value=i%2?660:880;o.type='sine';
+      const t0=AC.currentTime+i*.22;
+      g.gain.setValueAtTime(.0001,t0);g.gain.exponentialRampToValueAtTime(.25,t0+.02);
+      g.gain.exponentialRampToValueAtTime(.0001,t0+.18);
+      o.start(t0);o.stop(t0+.2);}
+  }catch(e){}}
+document.addEventListener('click',()=>{if(AC&&AC.state==='suspended')AC.resume()});
+
+/* ================= 高影响横幅 ================= */
+function showAlert(it){
+  const z=$('#alertZone');
+  const a=document.createElement('div');
+  a.className='alert'+(it.ai.level>=5?' lv5':'');
+  const dir=it.ai.direction==='利好'?'正面':it.ai.direction==='利空'?'负面':'中性';
+  a.innerHTML=`<span class="tag">L${it.ai.level} · ${dir}</span><span class="t">${esc(it.title)}</span><span class="x">✕</span>`;
+  a.querySelector('.x').onclick=e=>{e.stopPropagation();a.remove()};
+  a.onclick=()=>{const c=document.getElementById('c_'+it.id);if(c){c.scrollIntoView({behavior:'smooth',block:'center'});c.style.borderColor='var(--hot)'}};
+  setTimeout(()=>{a.style.animation='none'},120000);  // 2分钟后停止呼吸灯动画,降低GPU占用
+  z.prepend(a);
+  while(z.children.length>3)z.removeChild(z.lastChild);
+  beep(it.ai.level>=5?4:2);
+}
+
+/* ================= 宏观日历 ================= */
+const DEF_EVENTS=[
+  {n:'美国6月CPI',t:Date.UTC(2026,6,14,12,30)},{n:'FOMC 利率决议',t:Date.UTC(2026,6,29,18,0)},
+  {n:'非农就业(7月)',t:Date.UTC(2026,7,7,12,30)},{n:'美国7月CPI',t:Date.UTC(2026,7,12,12,30)},
+  {n:'非农就业(8月)',t:Date.UTC(2026,8,4,12,30)},{n:'美国8月CPI',t:Date.UTC(2026,8,11,12,30)},
+  {n:'FOMC 利率决议',t:Date.UTC(2026,8,16,18,0)},{n:'非农就业(9月)',t:Date.UTC(2026,9,2,12,30)},
+  {n:'美国9月CPI',t:Date.UTC(2026,9,14,12,30)},{n:'FOMC 利率决议',t:Date.UTC(2026,9,28,18,0)},
+  {n:'非农就业(10月)',t:Date.UTC(2026,10,6,13,30)},{n:'美国10月CPI',t:Date.UTC(2026,10,10,13,30)},
+  {n:'非农就业(11月)',t:Date.UTC(2026,11,4,13,30)},{n:'FOMC 利率决议',t:Date.UTC(2026,11,9,19,0)},
+  {n:'美国11月CPI',t:Date.UTC(2026,11,10,13,30)}
+];
+function loadEv(){try{const v=JSON.parse(localStorage.getItem(STORAGE_KEYS.events));if(Array.isArray(v))return v}catch(e){}
+  localStorage.setItem(STORAGE_KEYS.events,JSON.stringify(DEF_EVENTS));return DEF_EVENTS.slice()}
+function saveEv(v){localStorage.setItem(STORAGE_KEYS.events,JSON.stringify(v))}
+function cdStr(ms){const d=ms-Date.now();if(d<0)return'已过';
+  const day=Math.floor(d/864e5),h=Math.floor(d%864e5/36e5),m=Math.floor(d%36e5/6e4);
+  return(day?day+'天':'')+(h?h+'小时':'')+(day?'':m+'分')}
+function renderEvList(){
+  const evs=loadEv().sort((a,b)=>a.t-b.t);
+  $('#evList').innerHTML=evs.map((e,i)=>{
+    const past=e.t<Date.now();
+    return`<div class="evrow"><span class="cd ${past?'past':''}">${past?'已过':cdStr(e.t)}</span>
+      <span class="nm">${esc(e.n)}</span><span class="mini">${fmtT(e.t)}</span>
+      <span class="del" data-i="${i}" title="删除">✕</span></div>`}).join('')||'<p class="note">暂无事件</p>';
+  document.querySelectorAll('#evList .del').forEach(el=>el.onclick=()=>{
+    const evs2=loadEv().sort((a,b)=>a.t-b.t);evs2.splice(+el.dataset.i,1);saveEv(evs2);renderEvList();tickNextEvt()});
+}
+function tickNextEvt(){
+  const evs=loadEv().filter(e=>e.t>Date.now()).sort((a,b)=>a.t-b.t);
+  const el=$('#nextEvt');
+  if(!evs.length){el.textContent='无近期宏观事件';el.className='macro-event';return}
+  const e=evs[0],soon=e.t-Date.now()<36e5;
+  el.textContent=`${e.n} · ${cdStr(e.t)}`;
+  el.className=soon?'macro-event soon':'macro-event';
+}
+
+/* ================= 弹层管理 ================= */
+function openModal(id){closeAll();$('#overlay').classList.add('on');document.getElementById(id).classList.add('on');
+  if(id==='settingsModal')renderSettings();
+  if(id==='calendarModal')renderEvList();}
+function closeAll(){$('#overlay').classList.remove('on');document.querySelectorAll('.modal').forEach(m=>m.classList.remove('on'))}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeAll()});
+
+/* ================= 设置界面 ================= */
+function renderSettings(){
+  const b=$('#setBody');
+  const provOpts=id=>Object.entries(PROVIDERS).map(([k,v])=>`<option value="${k}" ${k===id?'selected':''}>${v.name}</option>`).join('');
+  b.innerHTML=`
+  <div class="msec"><h4>AI 分析模型</h4>
+    <div class="frow"><label>服务商</label><select id="sProv">${provOpts(S.provider)}</select></div>
+    <div id="provFields"></div>
+    <p class="note">Key 只保存在你自己浏览器的本地存储中，经由本机代理直连所选服务商。输入 Key 后会自动读取该账号可用的模型名。</p>
+    <div class="frow"><label class="tgl"><input type="checkbox" id="sDeep" ${S.deep?'checked':''}> 双层分析:≥4级重大新闻自动用第二模型深度复核</label></div>
+    <div class="frow" id="deepRow" style="${S.deep?'':'display:none'}"><label>深度模型</label><select id="sDeepProv">${provOpts(S.deepProvider)}</select><span class="note" style="margin:0">需在上方为该服务商也填好 Key</span></div>
+  </div>
+  <div class="msec"><h4>监控行为</h4>
+    <div class="frow"><label>界面主题</label><select id="sTheme"><option value="dark" ${S.theme==='dark'?'selected':''}>夜间模式</option><option value="light" ${S.theme==='light'?'selected':''}>日间模式</option></select></div>
+    <div class="frow"><label>轮询间隔(秒)</label><input type="number" id="sPoll" min="10" max="600" value="${S.pollSec}"></div>
+    <div class="frow"><label>新闻源</label>${Object.keys(SOURCES).map(k=>`<label class="tgl"><input type="checkbox" class="sSrc" data-k="${k}" ${S.srcOn[k]?'checked':''}>${SOURCES[k].name}</label>`).join('')}</div>
+    <div class="frow"><label class="tgl"><input type="checkbox" id="sSound" ${S.sound?'checked':''}> 重大新闻声音告警</label><button class="sbtn" onclick="beep(2)">试听</button></div>
+  </div>
+  <div class="msec"><h4>高级 · 数据源接口地址(留空用默认)</h4>
+    ${Object.keys(SOURCES).map(k=>`<div class="frow"><label>${SOURCES[k].name}</label><input type="text" class="sUrl" data-k="${k}" value="${esc(S.srcUrl[k]||'')}" placeholder="${esc(SOURCES[k].urls[0])}"></div>`).join('')}
+  </div>
+  <div class="msec"><button class="pbtn" id="btnSaveSet">保存设置</button> <button class="sbtn danger" id="btnClearLocal" type="button">清除全部本地数据</button> <span class="note" id="saveMsg" style="margin-left:8px"></span></div>`;
+
+  const renderProvFields=()=>{
+    const id=$('#sProv').value,p=PROVIDERS[id],u=S.prov[id]||{};
+    $('#provFields').innerHTML=`
+      ${id==='custom'||!p.base?`<div class="frow"><label>接口地址</label><input type="text" id="pBase" value="${esc(u.base||'')}" placeholder="https://api.example.com/v1"></div>`:''}
+      <div class="frow"><label>API Key</label><input type="password" id="pKey" value="${esc(u.key||'')}" placeholder="${id==='deepseek'?'sk-... (platform.deepseek.com 申请)':'API Key'}"></div>
+      <div class="frow"><label>模型名</label><div class="model-field">
+        <input type="text" id="pModel" list="modelOptions" value="${esc(u.model||'')}" placeholder="自动检测，也可手动填写">
+        <datalist id="modelOptions"></datalist><button type="button" class="sbtn" id="btnDetectModel">重新检测</button>
+      </div></div><div class="model-detect-status" id="modelDetectStatus">输入 API Key 后自动检测可用模型</div>`;
+    $('#pKey').oninput=()=>scheduleModelDetection();
+    $('#pKey').onchange=()=>scheduleModelDetection(0);
+    $('#pKey').onpaste=()=>scheduleModelDetection(120);
+    if($('#pBase')){$('#pBase').onchange=()=>scheduleModelDetection(0);$('#pBase').oninput=()=>scheduleModelDetection()}
+    $('#btnDetectModel').onclick=()=>scheduleModelDetection(0);
+    if($('#pKey').value.trim())scheduleModelDetection(120);
+  };
+  renderProvFields();
+  $('#sProv').onchange=()=>{ // 先暂存当前输入再切换
+    stashProv();S.provider=$('#sProv').value;renderProvFields()};
+  const stashProv=()=>{const id=S.provider;S.prov[id]=S.prov[id]||{};
+    if($('#pKey'))S.prov[id].key=$('#pKey').value.trim();
+    if($('#pModel'))S.prov[id].model=$('#pModel').value.trim();
+    if($('#pBase'))S.prov[id].base=$('#pBase').value.trim();};
+  $('#sDeep').onchange=e=>{$('#deepRow').style.display=e.target.checked?'':'none'};
+  $('#btnClearLocal').onclick=()=>{
+    if(!confirm('这会删除本浏览器中保存的全部 API Key、设置和自定义日历，确定继续吗？'))return;
+    localStorage.removeItem(STORAGE_KEYS.settings);localStorage.removeItem(STORAGE_KEYS.events);location.reload();
+  };
+  $('#btnSaveSet').onclick=()=>{
+    stashProv();
+    S.provider=$('#sProv').value;
+    S.deep=$('#sDeep').checked;S.deepProvider=$('#sDeepProv').value;
+    S.pollSec=Math.max(10,+$('#sPoll').value||30);
+    S.sound=$('#sSound').checked;S.theme=$('#sTheme').value==='light'?'light':'dark';
+    document.querySelectorAll('.sSrc').forEach(el=>S.srcOn[el.dataset.k]=el.checked);
+    document.querySelectorAll('.sUrl').forEach(el=>{const v=el.value.trim();if(v)S.srcUrl[el.dataset.k]=v;else delete S.srcUrl[el.dataset.k]});
+    saveS();
+    $('#saveMsg').textContent='✓ 已保存';
+    $('#setupBand').style.display=hasKey()?'none':'';
+    applyTheme();renderSrcDots();refreshDeskState();restartPoll();
+    setTimeout(()=>$('#saveMsg').textContent='',2000);
+  };
+}
+function restartPoll(){clearInterval(pollTimer);pollTimer=setInterval(pollAll,S.pollSec*1000)}
+
+/* ================= 初始化 ================= */
+function init(){
+  loadS();
+  applyTheme();
+  renderSrcDots();
+  $('#setupBand').style.display=hasKey()?'none':'';
+  refreshDeskState();
+  $('#btnSet').onclick=()=>openModal('settingsModal');
+  $('#btnCal').onclick=()=>openModal('calendarModal');
+  $('#nextEvt').onclick=()=>openModal('calendarModal');
+  $('#btnSound').onclick=()=>{S.sound=!S.sound;saveS();refreshDeskState();if(S.sound)beep(1)};
+  $('#btnTheme').onclick=()=>{S.theme=S.theme==='light'?'dark':'light';saveS();applyTheme()};
+  $('#fLevel').onchange=applyFilters;$('#fDir').onchange=applyFilters;
+  $('#fKw').oninput=()=>applyFilters();
+  $('#btnAddEv').onclick=()=>{
+    const n=$('#evName').value.trim(),t=$('#evTime').value;
+    if(!n||!t)return;
+    const evs=loadEv();evs.push({n,t:new Date(t).getTime()});saveEv(evs);
+    $('#evName').value='';renderEvList();tickNextEvt();};
+  tickNextEvt();setInterval(tickNextEvt,30000);
+  pollAll();restartPoll();
+}
+window.addEventListener('DOMContentLoaded',init);
+/* ================= AI 调用(多服务商适配) ================= */
+async function aiChat(system,user,{provider=S.provider,maxTokens=900}={}){
+  const c=provConf(provider);
+  if(!c.key)throw new Error('未配置 '+PROVIDERS[provider].name+' 的 API Key');
+  if(!c.base)throw new Error('未配置接口地址');
+  if(c.kind==='anthropic'){
+    const j=await gj(c.base+'/messages',{method:'POST',
+      headers:{'content-type':'application/json','x-api-key':c.key,'anthropic-version':'2023-06-01'},
+      body:JSON.stringify({model:c.model,max_tokens:maxTokens,system,messages:[{role:'user',content:user}]})});
+    return (j.content&&j.content[0]&&j.content[0].text)||'';
+  }
+  if(c.kind==='gemini'){
+    const j=await gj(`${c.base}/models/${c.model}:generateContent`,{method:'POST',
+      headers:{'content-type':'application/json','x-goog-api-key':c.key},
+      body:JSON.stringify({systemInstruction:{parts:[{text:system}]},contents:[{role:'user',parts:[{text:user}]}],
+        generationConfig:{maxOutputTokens:maxTokens,temperature:0.2}})});
+    return (j.candidates&&j.candidates[0]&&j.candidates[0].content&&j.candidates[0].content.parts.map(p=>p.text).join(''))||'';
+  }
+  // openai 兼容 (deepseek / openai / grok / custom)
+  const j=await gj(c.base+'/chat/completions',{method:'POST',
+    headers:{'content-type':'application/json','authorization':'Bearer '+c.key},
+    body:JSON.stringify({model:c.model,temperature:0.2,max_tokens:maxTokens,
+      messages:[{role:'system',content:system},{role:'user',content:user}]})});
+  return (j.choices&&j.choices[0]&&j.choices[0].message&&j.choices[0].message.content)||'';
+}
+function parseAIJson(text){
+  let t=String(text||'').replace(/```json|```/gi,'').trim();
+  const a=t.indexOf('{'),b=t.lastIndexOf('}');
+  if(a<0||b<=a)throw new Error('AI 未返回 JSON');
+  try{return JSON.parse(t.slice(a,b+1))}
+  catch(e){throw new Error('AI 返回的 JSON 格式无效')}
+}
+
+/* ================= 新闻分析队列 ================= */
+const aiQueue=[];let aiBusy=false;
+const MAX_AI_JSON_RETRIES=3;
+function queueAnalysis(it){if(!hasKey())return;aiQueue.push(it);pumpQueue()}
+function isRetryableAIError(error){return /AI 未返回 JSON|AI 返回的 JSON 格式无效/.test(String(error&&error.message||error||''))}
+async function analyzeNewsWithRetry(it){
+  let lastError;
+  for(let retry=0;retry<=MAX_AI_JSON_RETRIES;retry++){
+    if(retry>0){
+      const el=document.getElementById('ai_'+it.id);
+      if(el)el.innerHTML=`<span class="ai-wait">AI 返回格式异常，自动重试 ${retry}/${MAX_AI_JSON_RETRIES}</span>`;
+      await sleep(500*retry);
+    }
+    try{return await analyzeNews(it)}
+    catch(e){lastError=e;if(!isRetryableAIError(e)||retry===MAX_AI_JSON_RETRIES)break}
+  }
+  if(isRetryableAIError(lastError))throw new Error(`自动重试 ${MAX_AI_JSON_RETRIES} 次后仍未返回有效 JSON`);
+  throw lastError;
+}
+async function pumpQueue(){
+  if(aiBusy)return;aiBusy=true;
+  while(aiQueue.length){
+    const it=aiQueue.shift();
+    try{await analyzeNewsWithRetry(it)}
+    catch(e){const el=document.getElementById('ai_'+it.id);
+      if(el)el.innerHTML=`<span class="ai-err">AI 分析失败: ${esc(e.message)}</span> <span class="alink" onclick="retryAI('${it.id}')">重试</span>`;}
+    await sleep(350);
+  }
+  aiBusy=false;
+}
+function retryAI(id){const it=NEWS.get(id);if(!it)return;
+  const el=document.getElementById('ai_'+id);if(el)el.innerHTML='<span class="ai-wait">AI 分析中</span>';
+  queueAnalysis(it)}
+
+const NEWS_SYS='你是专业的加密行业新闻研究员。任务是识别事实、相关方、时效性与潜在行业影响；必须客观谨慎，宁可降低评级也不夸大，不提供买卖、仓位或价格点位建议，并且只输出一个JSON对象。';
+function newsPrompt(it){
+  return `请分析以下币圈快讯对市场的影响,严格输出JSON:
+{"direction":"利好|利空|中性","st":"正面|负面|中性","lt":"正面|负面|中性","level":1到5的整数,"conf":0到100整数,"coins":["受影响币种基础代码(如BTC),最多5个;影响整个行业则填BTC和ETH"],"cat":"监管|ETF|宏观|安全|上币|解锁|机构|技术|生态|其他","priced_in":true或false,"why":"2-3句具体分析,必须给出因果逻辑,不要空话","reverse":"一句话说明可能导致当前解读失效的条件"}
+字段说明:
+- st=短期(小时/天级)影响, lt=长期(周/月级)影响,两者可以不同
+- level影响等级: 1=噪音/日常 2=轻微 3=值得关注 4=重大(可能引发行情明显波动) 5=极重大(如FOMC意外决议/顶级交易所暴雷/美国重大监管落地)
+- priced_in: 若属旧闻发酵、符合预期的兑现、或市场大概率已提前反应,填true
+- 绝大多数快讯是1-2级,4级以上必须有充分理由
+- 只做新闻影响解读，不给出任何交易操作建议
+
+快讯 [来源:${it.src} | 时间:${fmtT(it.time)}]
+标题: ${it.title}
+内容: ${(it.body||'(无正文)').slice(0,800)}`;
+}
+
+async function analyzeNews(it){
+  const text=await aiChat(NEWS_SYS,newsPrompt(it),{maxTokens:600});
+  const a=parseAIJson(text);
+  a.level=Math.min(5,Math.max(1,Math.round(+a.level||1)));
+  a.conf=Math.min(100,Math.max(0,Math.round(+a.conf||50)));
+  a.coins=(Array.isArray(a.coins)?a.coins:[]).map(c=>String(c).toUpperCase().replace(/[^A-Z0-9]/g,'')).filter(c=>c&&c.length<=8).slice(0,5);
+  it.ai=a;
+  renderAI(it);
+  if(a.level>=4){
+    showAlert(it);
+    if(S.deep&&provConf(S.deepProvider).key&&S.deepProvider!==S.provider)deepAnalyze(it).catch(()=>{});
+  }
+  applyFilters();
+}
+
+async function deepAnalyze(it){
+  const text=await aiChat(NEWS_SYS,newsPrompt(it)+'\n\n这是一条初判为重大的新闻。请给出更深入的why(4-6句，包含历史类似事件的行业影响类比)，其余字段重新独立判断。',
+    {provider:S.deepProvider,maxTokens:1000});
+  const a=parseAIJson(text);
+  a.level=Math.min(5,Math.max(1,Math.round(+a.level||it.ai.level)));
+  a.conf=Math.min(100,Math.max(0,Math.round(+a.conf||it.ai.conf)));
+  a.coins=(Array.isArray(a.coins)&&a.coins.length?a.coins:it.ai.coins).map(c=>String(c).toUpperCase().replace(/[^A-Z0-9]/g,'')).slice(0,5);
+  a.deep=true;
+  it.ai=a;renderAI(it);applyFilters();
+}
+
+function renderAI(it){
+  const el=document.getElementById('ai_'+it.id);if(!el)return;
+  const a=it.ai;
+  const card=document.getElementById('c_'+it.id);
+  if(card){card.classList.remove('lv4','lv5');card.dataset.level=a.level;if(a.level>=4)card.classList.add('lv'+Math.min(5,a.level))}
+  const dirCls=a.direction==='利好'?'good':a.direction==='利空'?'bad':'flat';
+  const dirLabel=a.direction==='利好'?'正面影响':a.direction==='利空'?'负面影响':'中性影响';
+  const impact=v=>v==='正面'?`<b class="pos">＋正面</b>`:v==='负面'?`<b class="neg">－负面</b>`:'<b style="color:var(--dim)">中性</b>';
+  const lvlCls=a.level>=5?'xhi':a.level>=4?'hi':'';
+  el.innerHTML=`
+    <div class="brow">
+      <span class="bdg ${dirCls}">${dirLabel}</span>
+      <span class="mini">短期 ${impact(a.st)}</span><span class="mini">长期 ${impact(a.lt)}</span>
+      <span class="mini">影响级别 <span class="lvl ${lvlCls}">${[1,2,3,4,5].map(i=>`<i class="${i<=a.level?'on':''}"></i>`).join('')}</span> <b>L${a.level}</b></span>
+      <span class="mini">置信度 <b>${a.conf}%</b></span>
+      <span class="cat">${esc(a.cat||'其他')}</span>
+      ${a.priced_in?'<span class="pin" title="市场可能已提前消化此消息">或已反映</span>':''}
+      ${a.deep?'<span class="deep">深度复核</span>':''}
+      ${a.coins.map(c=>`<span class="coin" title="受影响资产">${c}</span>`).join('')}
+    </div>
+    <div class="why">${esc(a.why||'')}</div>
+    ${a.reverse?`<div class="rev">解读失效条件 · ${esc(a.reverse)}</div>`:''}`;
+  sortFeed();updateDashboard();
+}
+</script>
+</body>
+</html>
