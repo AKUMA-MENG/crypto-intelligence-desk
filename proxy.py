@@ -36,6 +36,22 @@ ALLOWED_APP_ORIGINS = {
     "http://127.0.0.1:%d" % PORT,
     "http://localhost:%d" % PORT,
 }
+PUBLIC_ORIGIN = os.environ.get("CID_PUBLIC_ORIGIN", "").rstrip("/")
+if PUBLIC_ORIGIN:
+    parsed_public_origin = urllib.parse.urlparse(PUBLIC_ORIGIN)
+    if (
+        parsed_public_origin.scheme not in {"http", "https"}
+        or not parsed_public_origin.hostname
+        or parsed_public_origin.path
+        or parsed_public_origin.params
+        or parsed_public_origin.query
+        or parsed_public_origin.fragment
+        or parsed_public_origin.username
+        or parsed_public_origin.password
+    ):
+        print("[错误] CID_PUBLIC_ORIGIN 必须是合法的 HTTP(S) 来源，例如 https://example.com。")
+        sys.exit(2)
+    ALLOWED_APP_ORIGINS.add(PUBLIC_ORIGIN)
 
 # 允许从浏览器透传到目标服务器的请求头(鉴权用)
 FORWARD_HEADERS = {"authorization", "x-api-key", "anthropic-version", "x-goog-api-key", "content-type"}

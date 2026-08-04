@@ -596,7 +596,7 @@ html[data-theme="light"] .pbtn{background:#dcecf4;color:#24536b;border-color:#76
 'use strict';
 /* ================= 基础工具 ================= */
 const $=s=>document.querySelector(s);
-const P=u=>'/p?u='+encodeURIComponent(u);
+const P=u=>'p?u='+encodeURIComponent(u);
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const safeLink=u=>{try{const x=new URL(String(u||''),location.href);return /^(https?):$/.test(x.protocol)?x.href:'#'}catch(e){return'#'}};
