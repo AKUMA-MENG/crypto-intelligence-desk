@@ -558,7 +558,7 @@ def _json_record_identity(
         return prefix + identity
     link = _clean(canonical_link)
     if link:
-        return "link:" + link
+        return "link-sha256:" + hashlib.sha256(link.encode("utf-8")).hexdigest()
     normalized = unicodedata.normalize(
         "NFKC", _clean(title) + "\n" + _clean(body)
     ).casefold()

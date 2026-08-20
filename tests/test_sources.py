@@ -117,6 +117,40 @@ class SourceTests(unittest.TestCase):
                 )
                 self.assertEqual(items[0].source_id, expected)
 
+    def test_idless_long_links_are_hashed_before_bounded_item_storage(self):
+        shared_prefix = "https://news.example/" + ("x" * 600)
+        payload = {
+            "data": {"data": [
+                {
+                    "title": "同标题",
+                    "content": "相同正文",
+                    "link": shared_prefix + "-first",
+                },
+                {
+                    "title": "同标题",
+                    "content": "相同正文",
+                    "link": shared_prefix + "-second",
+                },
+            ]},
+        }
+        definition = SOURCE_DEFINITIONS["blockbeats"]
+        first_poll = sources_module._parse_json(
+            "blockbeats", definition, payload, NOW
+        )
+        second_poll = sources_module._parse_json(
+            "blockbeats", definition, payload, NOW
+        )
+        self.assertEqual(len({item.source_id for item in first_poll}), 2)
+        self.assertEqual(
+            [item.source_id for item in second_poll],
+            [item.source_id for item in first_poll],
+        )
+        self.assertTrue(all(
+            item.source_id.startswith("blockbeats:json:link-sha256:")
+            and len(item.source_id) <= sources_module.MAX_SOURCE_ID_LENGTH
+            for item in first_poll
+        ))
+
     def test_source_module_does_not_use_python_310_zip_strict_keyword(self):
         source_path = Path(sources_module.__file__)
         tree = ast.parse(source_path.read_text(encoding="utf-8"))
