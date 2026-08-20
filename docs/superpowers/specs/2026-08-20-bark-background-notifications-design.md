@@ -361,3 +361,15 @@ Worker 在首次读取配置前加载项目目录 `.env`，但已有系统环境
 下一步只编写详细实施计划。计划获准进入编码后，必须采用测试驱动开发：先写失败测试并确认失败原因，再写最小实现使其通过。
 
 在用户另行授权前，实施仅限本地代码、模拟测试、配置示例和文档，不部署、不重启、不读取真实 Key、不发送真实通知。
+
+## 18. 生产新闻源兼容修复附录（2026-08-20，已批准）
+
+生产部署后，分信源冷启动证明 PANews 与链捕手未能建立基线，其他四个默认来源正常。用户已明确批准以下修复：
+
+1. PANews 固定 RSS 地址更新为 `https://www.panewslab.com/rss.xml?lang=zh&featured=true`。旧 `rss.panewslab.com/zh/gtimg/rss` 当前返回 301，旧 JSON fallback 当前返回 404；两者从 Worker 定义移除。
+2. 共享 HTTP transport 的原始响应上限保持 2 MiB，不允许自动重定向，不允许 HTTPS 降级或跨域 header 转发。
+3. `SourceClient` 的 gzip 解压后默认上限从 2 MiB 调整为 3 MiB。链捕手当前合法 RSS 解压后为 2,262,367 bytes；超过 3 MiB 的响应仍必须以固定错误拒绝。
+4. 修复保持固定 HTTPS 来源、每源最多 30 条、单源失败隔离、分源首次成功只建基线的既有契约。
+5. 发布版本升级为 `1.1.1`，CHANGELOG 只记录 PANews 最终 URL 和有界 3 MiB gzip 兼容修复。
+6. 测试必须先证明旧实现 RED：PANews URL 不匹配、默认上限拒绝 2 MiB 以上合法 gzip；然后证明 GREEN：约 2.26 MiB 可解析、超过 3 MiB 仍拒绝、完整测试通过。
+7. 增量部署必须从新提交生成无秘密归档，在服务器 staging 复跑完整测试；生产同步继续排除 `.env` 与运行状态。重启网页和 Worker 后，PANews 与 catcher 首次成功只加入 baseline，不得把现有文章送入 Gemini 或 Bark。

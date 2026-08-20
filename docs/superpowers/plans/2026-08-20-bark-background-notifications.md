@@ -2189,3 +2189,109 @@ Expected: the branch contains the approved design, this plan, and the focused im
 - [ ] `.env.example` contains only empty secrets and `.env` is ignored.
 - [ ] No real key was read, no real Gemini/Bark request was sent, and no online service was changed.
 - [ ] Git history contains focused commits and no unrelated user changes.
+
+---
+
+### Task 9: Repair Production PANews and Catcher Compatibility
+
+**Files:**
+- Modify: `crypto_desk/sources.py`
+- Modify: `tests/test_sources.py`
+- Modify: `tests/test_release_contract.py`
+- Modify: `VERSION`
+- Modify: `CHANGELOG.md`
+- Modify: `docs/superpowers/specs/2026-08-20-bark-background-notifications-design.md`
+- Modify: `docs/superpowers/plans/2026-08-20-bark-background-notifications.md`
+
+**Interfaces:**
+- Preserves: `SOURCE_DEFINITIONS["panews"] -> SourceDefinition` and `SourceClient.fetch(source_key, now) -> tuple[NewsItem, ...]`.
+- Changes: PANews has one final RSS endpoint; `SourceClient` default `max_decompressed_bytes` is exactly `3 * 1024 * 1024`.
+- Preserves: injected `max_decompressed_bytes` overrides remain testable, raw transport remains bounded, and responses above the configured decoded limit raise sanitized `SourceError("source response too large")`.
+
+- [ ] **Step 1: Write failing production regressions**
+
+Add focused tests equivalent to:
+
+```python
+def test_panews_uses_current_final_rss_without_redirect_fallback(self):
+    self.assertEqual(
+        SOURCE_DEFINITIONS["panews"].urls,
+        ("https://www.panewslab.com/rss.xml?lang=zh&featured=true",),
+    )
+    self.assertEqual(sources_module._SOURCE_FORMATS["panews"], ("rss",))
+
+def test_default_limit_accepts_current_catcher_sized_gzip(self):
+    large_description = "x" * 2262367
+    body = (
+        "<rss><channel><item><guid>cc-large</guid><title>链捕手测试</title>"
+        "<description>%s</description></item></channel></rss>" % large_description
+    ).encode("utf-8")
+    transport = RecordingTransport([
+        HttpResponse(200, {"Content-Encoding": "gzip"}, gzip.compress(body))
+    ])
+    self.assertEqual(len(SourceClient(transport).fetch("catcher", NOW)), 1)
+
+def test_default_limit_rejects_gzip_over_three_mib(self):
+    oversized = b"x" * (3 * 1024 * 1024 + 1)
+    transport = RecordingTransport([
+        HttpResponse(200, {"Content-Encoding": "gzip"}, gzip.compress(oversized))
+    ])
+    with self.assertRaisesRegex(SourceError, "source response too large"):
+        SourceClient(transport).fetch("catcher", NOW)
+```
+
+Update the release contract to expect `VERSION == "1.1.1"`.
+
+- [ ] **Step 2: Run focused tests and verify RED**
+
+Run:
+
+```bash
+env -u GEMINI_API_KEY -u BARK_PUSH_KEY python3 -m unittest \\
+  tests.test_sources.SourceTests.test_panews_uses_current_final_rss_without_redirect_fallback \\
+  tests.test_sources.SourceTests.test_default_limit_accepts_current_catcher_sized_gzip \\
+  tests.test_sources.SourceTests.test_default_limit_rejects_gzip_over_three_mib \\
+  tests.test_release_contract.ReleaseContractTests.test_version_and_documented_models -v
+```
+
+Expected: PANews endpoint, 2.26 MiB default-limit, and version assertions fail on 1.1.0; the over-3-MiB assertion already passes or remains safely failing only because the default is still lower.
+
+- [ ] **Step 3: Implement the minimal source and release changes**
+
+In `crypto_desk/sources.py`, define:
+
+```python
+_DEFAULT_MAX_DECOMPRESSED_BYTES = 3 * 1024 * 1024
+```
+
+Use it as the `SourceClient` constructor default. Replace PANews definitions with exactly one final RSS URL and one `rss` format. Do not alter redirect policy or other sources.
+
+Set `VERSION` to `1.1.1` and prepend a CHANGELOG entry containing exactly the two operational fixes.
+
+- [ ] **Step 4: Run focused and full GREEN gates**
+
+Run:
+
+```bash
+env -u GEMINI_API_KEY -u BARK_PUSH_KEY python3 -m unittest tests.test_sources tests.test_release_contract -v
+env -u GEMINI_API_KEY -u BARK_PUSH_KEY python3 -m unittest discover -s tests -v
+python3 -m compileall -q crypto_desk background_worker.py proxy.py
+sh -n start.sh
+git diff --check
+```
+
+Expected: focused and complete suites pass, syntax checks exit 0, and diff check prints nothing.
+
+- [ ] **Step 5: Commit, push, stage, and incrementally deploy**
+
+```bash
+git add crypto_desk/sources.py tests/test_sources.py tests/test_release_contract.py VERSION CHANGELOG.md docs/superpowers/specs/2026-08-20-bark-background-notifications-design.md docs/superpowers/plans/2026-08-20-bark-background-notifications.md
+git commit -m "fix: restore production news sources"
+git push origin codex/bark-background-worker
+```
+
+Generate an exact Git archive from the new commit, verify no `.env` or state, run the complete suite in remote staging, create a 1.1.0 rollback backup, sync while excluding production `.env` and state, then restart `crypto-intelligence-desk.service` and `crypto-intelligence-desk-worker.service`.
+
+- [ ] **Step 6: Verify 6/6 production baseline and public release**
+
+Verify both services active/enabled with zero unexpected restarts, public and loopback `/ping` return 1.1.1, state contains all six configured `baselined_sources`, PANews and catcher records are baseline-only on first success, delivery count remains zero for those recovered historical items, logs contain no secret patterns, and unrelated Nginx/services remain unchanged.
