@@ -20,6 +20,7 @@ import sys
 import gzip
 import io
 import ipaddress
+import json
 import socket
 
 try:
@@ -30,6 +31,17 @@ except ValueError:
     print("[错误] CID_PORT 必须是 1024 到 65535 之间的整数。")
     sys.exit(2)
 BASE = os.path.dirname(os.path.abspath(__file__))
+
+
+def read_app_version():
+    try:
+        with open(os.path.join(BASE, "VERSION"), "r", encoding="utf-8") as version_file:
+            return version_file.read().strip() or "unknown"
+    except OSError:
+        return "unknown"
+
+
+APP_VERSION = read_app_version()
 MAX_REQUEST_BODY = 2 * 1024 * 1024
 MAX_RESPONSE_BODY = 12 * 1024 * 1024
 ALLOWED_APP_ORIGINS = {
@@ -226,7 +238,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self._reply(403, b'{"error":"origin not allowed"}')
             return self._forward("GET")
         if path == "/ping":
-            return self._reply(200, b'{"ok":true,"app":"crypto-intelligence-desk","version":"1.0.1"}')
+            data = json.dumps(
+                {"ok": True, "app": "crypto-intelligence-desk", "version": APP_VERSION},
+                separators=(",", ":"),
+            ).encode("utf-8")
+            return self._reply(200, data)
         self._reply(404, b'{"error":"not found"}')
 
     def do_POST(self):

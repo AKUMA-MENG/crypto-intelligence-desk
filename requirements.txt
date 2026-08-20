@@ -1,2 +1,2 @@
 # No third-party Python packages are required.
-# proxy.py uses only the Python standard library.
+# The web monitor and background worker use only the Python standard library.

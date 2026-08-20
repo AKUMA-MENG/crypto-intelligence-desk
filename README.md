@@ -58,6 +58,14 @@ python3 proxy.py
 
 发布包不包含任何 API Key、账号、Cookie 或个人路径。Key 只保存在当前浏览器、当前站点的本地存储中，并通过本机代理发送给用户选择的 AI 服务商。请勿在公共电脑上选择长期保存；离开前可在设置底部点击“清除全部本地数据”。
 
+## Optional 24-hour Bark worker
+
+`background_worker.py` runs independently from the web monitor. It watches PANews, Binance announcements, Odaily, Wu Blockchain, TechFlow, and ChainCatcher even when no browser is open. New articles are first analyzed by `gemini-3.1-flash-lite`; only L4-L5 results are reviewed by `gemini-3.5-flash-lite`. Bark is sent only when the review remains L4-L5. If all review attempts fail, the notification is sent once from the primary result and is marked as a fallback.
+
+Copy `.env.example` to `.env`, fill `GEMINI_API_KEY` and `BARK_PUSH_KEY` locally, and never commit `.env`. Start the worker separately with `python3 background_worker.py`. Configuration is loaded at startup, so restart only the worker after changing it.
+
+The first configured run creates a baseline and does not push existing articles. State is retained for seven days or 2,000 terminal records and prevents duplicate delivery across restarts. If either required key is missing, the worker stays idle and sends no network requests. The worker opens no HTTP port and does not expose either key to the browser or `/ping`.
+
 ## 目录结构
 
 ```text

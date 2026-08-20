@@ -1,0 +1,36 @@
+[Unit]
+Description=Crypto Intelligence Desk Background Worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/crypto-intelligence-desk
+EnvironmentFile=-/opt/crypto-intelligence-desk/.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=CID_WORKER_STATE_FILE=/var/lib/crypto-intelligence-desk/worker-state.json
+ExecStart=/usr/bin/python3 /opt/crypto-intelligence-desk/background_worker.py
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=20
+UMask=0027
+StateDirectory=crypto-intelligence-desk
+StateDirectoryMode=0750
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

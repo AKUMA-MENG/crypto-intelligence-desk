@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.0
+
+- Add an optional independent 24-hour news worker using Gemini primary/review analysis.
+- Push only confirmed L4-L5 news through Bark, with cold-start suppression and durable deduplication.
+- Keep Gemini and Bark credentials server-side and expose no notification endpoint.
+
 ## 1.0.1
 
 - 修复部分全新 Windows 电脑执行 `start.bat` 时出现乱码和“不是内部或外部命令”的问题。

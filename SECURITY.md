@@ -60,3 +60,7 @@
 - 已做过的安全处理。
 
 维护者确认并发布修复前，请给予合理处理时间。
+
+## Background worker secrets
+
+The optional background worker reads `GEMINI_API_KEY` and `BARK_PUSH_KEY` only from its startup environment or an ignored `.env` file. It opens no listening port, and the web page and `/ping` endpoint do not expose worker configuration. Logs, state files, tests, and release artifacts must not contain either key, an authorization header, or a complete Bark request URL.

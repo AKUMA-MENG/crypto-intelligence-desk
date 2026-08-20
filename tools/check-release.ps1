@@ -10,7 +10,41 @@ $required = @(
     'README.md', 'SECURITY.md', 'CONTRIBUTING.md',
     'THIRD_PARTY_NOTICES.md', 'LICENSE', 'VERSION', '.gitignore',
     'tools\bootstrap-python.ps1', 'tools\start.ps1', 'tools\check-release.ps1',
-    'CHANGELOG.md'
+    'CHANGELOG.md',
+    '.env.example',
+    'requirements.txt',
+    '使用说明.md',
+    'background_worker.py',
+    'crypto_desk\__init__.py',
+    'crypto_desk\config.py',
+    'crypto_desk\gemini.py',
+    'crypto_desk\models.py',
+    'crypto_desk\notifications\__init__.py',
+    'crypto_desk\notifications\bark.py',
+    'crypto_desk\policy.py',
+    'crypto_desk\source_http.py',
+    'crypto_desk\sources.py',
+    'crypto_desk\state.py',
+    'crypto_desk\transport.py',
+    'crypto_desk\worker.py',
+    'deploy\crypto-intelligence-desk-worker.service',
+    'tests\__init__.py',
+    'tests\helpers.py',
+    'tests\fixtures\binance.json',
+    'tests\fixtures\catcher.xml',
+    'tests\fixtures\ctcn.xml',
+    'tests\fixtures\odaily.xml',
+    'tests\fixtures\panews.xml',
+    'tests\fixtures\techflow.json',
+    'tests\test_bark.py',
+    'tests\test_config.py',
+    'tests\test_gemini.py',
+    'tests\test_policy.py',
+    'tests\test_release_contract.py',
+    'tests\test_sources.py',
+    'tests\test_state.py',
+    'tests\test_transport.py',
+    'tests\test_worker.py'
 )
 
 foreach ($relative in $required) {
@@ -40,7 +74,11 @@ $rules = [ordered]@{
 
 $textExtensions = @('.html', '.py', '.bat', '.cmd', '.ps1', '.sh', '.md', '.txt', '.json', '.gitignore')
 $files = Get-ChildItem -LiteralPath $projectRoot -Recurse -File | Where-Object {
-    $textExtensions -contains $_.Extension.ToLowerInvariant() -or $_.Name -eq '.gitignore' -or $_.Name -eq 'VERSION'
+    $_.Name -ne '.env' -and (
+        $textExtensions -contains $_.Extension.ToLowerInvariant() -or
+        $_.Name -eq '.gitignore' -or
+        $_.Name -eq 'VERSION'
+    )
 }
 
 foreach ($rule in $rules.GetEnumerator()) {
