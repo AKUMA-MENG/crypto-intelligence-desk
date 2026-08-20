@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 
+from crypto_desk.gemini import GeminiRetryableError
 from crypto_desk.models import NewsItem
 
 
@@ -16,6 +17,35 @@ class RecordingTransport:
         if not self.responses:
             raise AssertionError("unexpected HTTP request")
         return self.responses.pop(0)
+
+
+class FakeGemini:
+    def __init__(self, results):
+        self.results = list(results)
+        self.models = []
+        self.review_flags = []
+
+    def analyze(self, item, model, review=False):
+        self.models.append(model)
+        self.review_flags.append(review)
+        if not self.results:
+            raise AssertionError("unexpected Gemini call")
+        result = self.results.pop(0)
+        if result == "retry":
+            raise GeminiRetryableError("retryable Gemini failure")
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+
+class FakeBark:
+    def __init__(self, delivered):
+        self.delivered = delivered
+        self.calls = []
+
+    def send(self, text, title, now=None):
+        self.calls.append((text, title, now))
+        return self.delivered
 
 
 def sample_news(source="PANews", title="重大新闻"):
