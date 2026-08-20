@@ -1,5 +1,6 @@
 # Local portable runtime downloaded on first Windows launch
 .runtime/
+.env
 
 # Python-generated files
 __pycache__/
