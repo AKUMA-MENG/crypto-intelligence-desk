@@ -1,10 +1,13 @@
+import ast
 from datetime import datetime, timezone
 import gzip
 import json
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 from crypto_desk.models import HttpResponse
+import crypto_desk.sources as sources_module
 from crypto_desk.sources import SOURCE_DEFINITIONS, SourceClient, SourceError, fetch_sources
 from tests.helpers import RecordingTransport, sample_news
 
@@ -15,6 +18,29 @@ CHALLENGE = b"<script>var arg1='0123456789ABCDEF0123456789ABCDEF01234567'</scrip
 
 
 class SourceTests(unittest.TestCase):
+    def test_source_module_does_not_use_python_310_zip_strict_keyword(self):
+        source_path = Path(sources_module.__file__)
+        tree = ast.parse(source_path.read_text(encoding="utf-8"))
+        strict_zip_calls = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "zip"
+            and any(keyword.arg == "strict" for keyword in node.keywords)
+        ]
+        self.assertEqual(strict_zip_calls, [])
+
+    def test_endpoint_format_length_mismatch_is_sanitized_before_request(self):
+        transport = RecordingTransport([])
+        with patch.object(sources_module, "_SOURCE_FORMATS", {"binance": ()}):
+            with self.assertRaisesRegex(
+                SourceError, "source configuration invalid"
+            ) as caught:
+                SourceClient(transport).fetch("binance", NOW)
+        self.assertNotIn("binance.com", str(caught.exception))
+        self.assertEqual(transport.requests, [])
+
     def test_each_default_source_parses_two_records(self):
         fixture_names = {
             "panews": "panews.xml",

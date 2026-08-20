@@ -122,10 +122,11 @@ class SourceClient:
             raise SourceError("unknown source")
         instant = _utc(now)
         retained_error: SourceError | None = None
+        formats = _SOURCE_FORMATS.get(source_key)
+        if formats is None or len(definition.urls) != len(formats):
+            raise SourceError("source configuration invalid")
 
-        for url, expected_format in zip(
-            definition.urls, _SOURCE_FORMATS[source_key], strict=True
-        ):
+        for url, expected_format in zip(definition.urls, formats):
             try:
                 body = self._request(source_key, url)
                 items = _parse(
