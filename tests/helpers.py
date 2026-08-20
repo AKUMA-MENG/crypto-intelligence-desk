@@ -48,6 +48,25 @@ class FakeBark:
         return self.delivered
 
 
+class FakeSourceFetcher:
+    def __init__(self, items):
+        self.items = list(items)
+        self.calls = 0
+
+    def __call__(self, source_names, now):
+        self.calls += 1
+        return tuple(self.items)
+
+
+class FakeProcessor:
+    def __init__(self):
+        self.calls = 0
+
+    def process_due(self, state, now):
+        self.calls += 1
+        return 0
+
+
 def sample_news(source="PANews", title="重大新闻"):
     return NewsItem(
         source_id="sample-1",
