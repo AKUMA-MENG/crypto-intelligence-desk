@@ -15,7 +15,7 @@ from crypto_desk.config import WorkerConfig, load_config
 from crypto_desk.gemini import GeminiClient
 from crypto_desk.notifications.bark import BarkClient
 from crypto_desk.policy import NewsProcessor
-from crypto_desk.sources import SourceClient, fetch_sources
+from crypto_desk.sources import SourceClient, SourceFetchResult, fetch_sources_with_status
 from crypto_desk.state import StateStore
 from crypto_desk.transport import UrllibTransport
 
@@ -50,18 +50,40 @@ class Worker:
 
             state = self.store.load()
             try:
-                items = self.source_fetcher(self.config.sources, now)
+                result = self.source_fetcher(self.config.sources, now)
             except Exception:
                 _LOGGER.error("source_cycle_failed")
                 return "poll_completed"
 
-            if not state.baseline_initialized:
-                self.store.baseline(state, items, now)
-                self.store.save(state)
-                return "baseline_created"
+            if not isinstance(result, SourceFetchResult):
+                if len(self.config.sources) != 1:
+                    _LOGGER.error("source_cycle_failed")
+                    return "poll_completed"
+                result = SourceFetchResult({self.config.sources[0]: tuple(result)})
 
-            self.store.register_new(state, items, now)
+            previously_baselined = set(state.baselined_sources)
+            new_items = []
+            for source_key in self.config.sources:
+                items = result.by_source.get(source_key)
+                if items is None:
+                    continue
+                if source_key not in previously_baselined:
+                    self.store.baseline_source(state, source_key, items, now)
+                else:
+                    new_items.extend(items)
+
+            state.baseline_initialized = all(
+                source_key in state.baselined_sources
+                for source_key in self.config.sources
+            )
+            created_baseline = bool(
+                set(state.baselined_sources) - previously_baselined
+            )
+
+            self.store.register_new(state, new_items, now)
             self.store.save(state)
+            if created_baseline and not new_items:
+                return "baseline_created"
             self.processor.process_due(state, now)
             self.store.prune(state, now)
             self.store.save(state)
@@ -94,7 +116,7 @@ def _build_worker(config: WorkerConfig) -> Worker:
     )
 
     def source_fetcher(source_names: Sequence[str], now: datetime):
-        return fetch_sources(source_names, source_client, now)
+        return fetch_sources_with_status(source_names, source_client, now)
 
     return Worker(config, store, source_fetcher, processor)
 

@@ -14,8 +14,10 @@ import unicodedata
 from crypto_desk.models import NewsItem
 
 
-STATE_VERSION = 1
+STATE_VERSION = 2
 MAX_SOURCE_ID_LENGTH = 512
+MAX_BASELINED_SOURCES = 32
+MAX_SOURCE_KEY_LENGTH = 64
 MAX_SOURCE_NAME_LENGTH = 128
 MAX_TITLE_LENGTH = 1000
 MAX_BODY_LENGTH = 10000
@@ -102,6 +104,7 @@ class StateWriteError(RuntimeError):
 class WorkerState:
     version: int
     baseline_initialized: bool
+    baselined_sources: list[str]
     items: dict[str, dict[str, Any]]
 
 
@@ -267,8 +270,19 @@ def _validate_record(record: Any) -> None:
 def _validate_state(state: WorkerState) -> None:
     if type(state.version) is not int or state.version != STATE_VERSION:
         raise ValueError("unsupported state version")
-    if type(state.baseline_initialized) is not bool or type(state.items) is not dict:
+    if (
+        type(state.baseline_initialized) is not bool
+        or type(state.baselined_sources) is not list
+        or type(state.items) is not dict
+    ):
         raise ValueError("invalid worker state")
+    if (
+        len(state.baselined_sources) > MAX_BASELINED_SOURCES
+        or state.baselined_sources != sorted(set(state.baselined_sources))
+        or any(not _valid_source_key(key) for key in state.baselined_sources)
+    ):
+        raise ValueError("invalid baselined sources")
+    seen_source_ids: set[str] = set()
     for fingerprint, record in state.items.items():
         _validate_record(record)
         if (
@@ -278,6 +292,18 @@ def _validate_state(state: WorkerState) -> None:
             or fingerprint != _title_fingerprint(record["item"]["title"])
         ):
             raise ValueError("invalid state fingerprint")
+        record_source_ids = set(record["source_ids"])
+        if seen_source_ids.intersection(record_source_ids):
+            raise ValueError("duplicate source id across state records")
+        seen_source_ids.update(record_source_ids)
+
+
+def _valid_source_key(value: Any) -> bool:
+    return (
+        _is_bounded_string(value, MAX_SOURCE_KEY_LENGTH)
+        and value.isascii()
+        and all(character.isalnum() or character in "-_" for character in value)
+    )
 
 
 class StateStore:
@@ -293,19 +319,20 @@ class StateStore:
             if not isinstance(payload, dict) or set(payload) != {
                 "version",
                 "baseline_initialized",
+                "baselined_sources",
                 "items",
             }:
                 raise ValueError("invalid state document")
             state = WorkerState(
                 version=payload["version"],
                 baseline_initialized=payload["baseline_initialized"],
+                baselined_sources=payload["baselined_sources"],
                 items=payload["items"],
             )
             _validate_state(state)
         except (
             OSError,
             UnicodeError,
-            json.JSONDecodeError,
             KeyError,
             ValueError,
             TypeError,
@@ -336,6 +363,7 @@ class StateStore:
                     {
                         "version": state.version,
                         "baseline_initialized": state.baseline_initialized,
+                        "baselined_sources": state.baselined_sources,
                         "items": state.items,
                     },
                     temporary,
@@ -361,11 +389,35 @@ class StateStore:
     ) -> None:
         if state.baseline_initialized:
             return
+        self._baseline_items(state, items, now)
+        state.baseline_initialized = True
+
+    def baseline_source(
+        self,
+        state: WorkerState,
+        source_key: str,
+        items: Iterable[NewsItem],
+        now: datetime,
+    ) -> None:
+        if not _valid_source_key(source_key):
+            raise ValueError("invalid source key")
+        if source_key in state.baselined_sources:
+            return
+        self._baseline_items(state, items, now)
+        state.baselined_sources = sorted(state.baselined_sources + [source_key])
+
+    def _baseline_items(
+        self, state: WorkerState, items: Iterable[NewsItem], now: datetime
+    ) -> None:
         timestamp = _utc_iso(now)
+        source_index = self._source_index(state)
         for item in items:
+            if item.source_id in source_index:
+                continue
             fingerprint = news_fingerprint(item)
             if fingerprint in state.items:
                 self._merge_source_id(state.items[fingerprint], item.source_id, timestamp)
+                source_index[item.source_id] = state.items[fingerprint]
                 continue
             state.items[fingerprint] = {
                 "stage": "baseline",
@@ -374,17 +426,21 @@ class StateStore:
                 "first_seen_at": timestamp,
                 "updated_at": timestamp,
             }
-        state.baseline_initialized = True
+            source_index[item.source_id] = state.items[fingerprint]
 
     def register_new(
         self, state: WorkerState, items: Iterable[NewsItem], now: datetime
     ) -> int:
         timestamp = _utc_iso(now)
         created = 0
+        source_index = self._source_index(state)
         for item in items:
+            if item.source_id in source_index:
+                continue
             fingerprint = news_fingerprint(item)
             if fingerprint in state.items:
                 self._merge_source_id(state.items[fingerprint], item.source_id, timestamp)
+                source_index[item.source_id] = state.items[fingerprint]
                 continue
             state.items[fingerprint] = {
                 "stage": "pending_primary",
@@ -400,6 +456,7 @@ class StateStore:
                 "review_failed": False,
                 "delivery_started_at": None,
             }
+            source_index[item.source_id] = state.items[fingerprint]
             created += 1
         return created
 
@@ -435,8 +492,17 @@ class StateStore:
         return WorkerState(
             version=STATE_VERSION,
             baseline_initialized=False,
+            baselined_sources=[],
             items={},
         )
+
+    @staticmethod
+    def _source_index(state: WorkerState) -> dict[str, dict[str, Any]]:
+        return {
+            source_id: record
+            for record in state.items.values()
+            for source_id in record.get("source_ids", ())
+        }
 
     @staticmethod
     def _merge_source_id(

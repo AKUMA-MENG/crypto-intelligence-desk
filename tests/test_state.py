@@ -7,7 +7,7 @@ from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
 
-from crypto_desk.state import StateStore, StateWriteError, news_fingerprint
+from crypto_desk.state import STATE_VERSION, StateStore, StateWriteError, news_fingerprint
 from tests.helpers import sample_news
 
 
@@ -52,6 +52,42 @@ def complete_record(stage="pending_primary"):
 
 
 class StateTests(unittest.TestCase):
+    def test_per_source_baseline_round_trips_for_safe_source_additions(self):
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "state.json"
+            store = StateStore(path)
+            state = store.load()
+            store.baseline_source(
+                state,
+                "panews",
+                [replace(sample_news(), source_id="panews:guid:old")],
+                NOW,
+            )
+            store.save(state)
+
+            restarted = store.load()
+            self.assertEqual(restarted.baselined_sources, ["panews"])
+            self.assertFalse(restarted.baseline_initialized)
+
+    def test_same_source_id_changed_title_is_deduped_after_restart(self):
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "state.json"
+            store = StateStore(path)
+            original = replace(
+                sample_news(title="旧标题"), source_id="panews:guid:stable-1"
+            )
+            renamed = replace(original, title="同一事件的新标题")
+            state = store.load()
+            store.baseline_source(state, "panews", [original], NOW)
+            store.save(state)
+
+            restarted = store.load()
+            self.assertEqual(store.register_new(restarted, [renamed], NOW), 0)
+            self.assertEqual(len(restarted.items), 1)
+            record = next(iter(restarted.items.values()))
+            self.assertEqual(record["item"]["title"], "旧标题")
+            self.assertEqual(record["source_ids"], ["panews:guid:stable-1"])
+
     def test_cold_start_baselines_without_pending_analysis(self):
         with TemporaryDirectory() as tmp:
             store = StateStore(Path(tmp) / "state.json")
@@ -73,8 +109,9 @@ class StateTests(unittest.TestCase):
             path = Path(tmp) / "state.json"
             fingerprint = news_fingerprint(sample_news())
             path.write_text(json.dumps({
-                "version": 1,
+                "version": STATE_VERSION,
                 "baseline_initialized": True,
+                "baselined_sources": ["panews"],
                 "items": {fingerprint: complete_record("delivery_started")},
             }), encoding="utf-8")
             state = StateStore(path).load()
@@ -222,8 +259,9 @@ class StateTests(unittest.TestCase):
             record = complete_record()
             record["review_attempts"] = False
             path.write_text(json.dumps({
-                "version": 1,
+                "version": STATE_VERSION,
                 "baseline_initialized": True,
+                "baselined_sources": ["panews"],
                 "items": {news_fingerprint(sample_news()): record},
             }), encoding="utf-8")
             state = StateStore(path).load()
@@ -274,8 +312,9 @@ class StateTests(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             path = Path(tmp) / "state.json"
             path.write_text(json.dumps({
-                "version": 1,
+                "version": STATE_VERSION,
                 "baseline_initialized": True,
+                "baselined_sources": ["panews"],
                 "items": {"0" * 64: complete_record()},
             }), encoding="utf-8")
             state = StateStore(path).load()

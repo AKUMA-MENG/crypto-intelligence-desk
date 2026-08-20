@@ -8,7 +8,13 @@ from unittest.mock import patch
 
 from crypto_desk.models import HttpResponse
 import crypto_desk.sources as sources_module
-from crypto_desk.sources import SOURCE_DEFINITIONS, SourceClient, SourceError, fetch_sources
+from crypto_desk.sources import (
+    SOURCE_DEFINITIONS,
+    SourceClient,
+    SourceError,
+    fetch_sources,
+    fetch_sources_with_status,
+)
 from tests.helpers import RecordingTransport, sample_news
 
 
@@ -68,6 +74,19 @@ class SourceTests(unittest.TestCase):
 
         items = fetch_sources(("panews", "binance"), FakeClient(), NOW)
         self.assertEqual([item.source for item in items], ["Binance"])
+
+    def test_status_result_identifies_each_successful_source(self):
+        class FakeClient:
+            def fetch(self, source, now):
+                if source == "binance":
+                    raise RuntimeError("failed")
+                return (sample_news(source="PANews"),)
+
+        result = fetch_sources_with_status(
+            ("panews", "binance"), FakeClient(), NOW
+        )
+        self.assertEqual(tuple(result.by_source), ("panews",))
+        self.assertEqual(result.by_source["panews"][0].source, "PANews")
 
     def test_all_source_failures_raise_without_exposing_details(self):
         class FailingClient:
@@ -171,6 +190,50 @@ class SourceTests(unittest.TestCase):
         ).fetch("panews", NOW)
         self.assertEqual([item.title for item in items], ["kept"])
         self.assertEqual(items[0].published_at, NOW)
+
+    def test_rss_guid_is_preserved_and_namespaced_across_title_changes(self):
+        first = (
+            b"<rss><channel><item><guid>stable-guid-1</guid>"
+            b"<title>first title</title><link>https://news.example/a</link>"
+            b"</item></channel></rss>"
+        )
+        second = first.replace(b"first title", b"renamed title")
+        first_item = SourceClient(
+            RecordingTransport([HttpResponse(200, {}, first)])
+        ).fetch("panews", NOW)[0]
+        second_item = SourceClient(
+            RecordingTransport([HttpResponse(200, {}, second)])
+        ).fetch("panews", NOW)[0]
+        self.assertEqual(first_item.source_id, "panews:guid:stable-guid-1")
+        self.assertEqual(second_item.source_id, first_item.source_id)
+
+    def test_rss_uses_namespaced_link_then_title_as_identity_fallbacks(self):
+        with_link = (
+            b"<rss><channel><item><title>linked</title>"
+            b"<link>https://news.example/stable</link></item></channel></rss>"
+        )
+        title_only = (
+            b"<rss><channel><item><title>title only</title>"
+            b"</item></channel></rss>"
+        )
+        linked_item = SourceClient(
+            RecordingTransport([HttpResponse(200, {}, with_link)])
+        ).fetch("odaily", NOW)[0]
+        title_item = SourceClient(
+            RecordingTransport([HttpResponse(200, {}, title_only)])
+        ).fetch("odaily", NOW)[0]
+        self.assertEqual(
+            linked_item.source_id,
+            "odaily:link:https://news.example/stable",
+        )
+        self.assertTrue(title_item.source_id.startswith("odaily:title:"))
+
+    def test_json_source_ids_are_namespaced_by_configured_source_key(self):
+        body = (FIXTURES / "binance.json").read_bytes()
+        item = SourceClient(
+            RecordingTransport([HttpResponse(200, {}, body)])
+        ).fetch("binance", NOW)[0]
+        self.assertTrue(item.source_id.startswith("binance:"))
 
     def test_source_urls_are_fixed_https_and_each_source_is_capped_at_thirty(self):
         self.assertTrue(all(

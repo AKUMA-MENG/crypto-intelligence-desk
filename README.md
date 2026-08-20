@@ -62,7 +62,7 @@ python3 proxy.py
 
 `background_worker.py` runs independently from the web monitor. It watches PANews, Binance announcements, Odaily, Wu Blockchain, TechFlow, and ChainCatcher even when no browser is open. New articles are first analyzed by `gemini-3.1-flash-lite`; only L4-L5 results are reviewed by `gemini-3.5-flash-lite`. Bark is sent only when the review remains L4-L5. If all review attempts fail, the notification is sent once from the primary result and is marked as a fallback.
 
-Copy `.env.example` to `.env`, fill `GEMINI_API_KEY` and `BARK_PUSH_KEY` locally, and never commit `.env`. Start the worker separately with `python3 background_worker.py`. Configuration is loaded at startup, so restart only the worker after changing it.
+Copy `.env.example` to `.env`, fill `GEMINI_API_KEY` and `BARK_PUSH_KEY` locally, and never commit `.env`. In production, restrict the file to the worker account before entering credentials: `cp .env.example .env && chmod 600 .env` (or run `chmod 600 .env` on an existing file), then verify the systemd `User` can read it. Start the worker separately with `python3 background_worker.py`. Configuration is loaded at startup, so restart only the worker after changing it.
 
 The first configured run creates a baseline and does not push existing articles. State is retained for seven days or 2,000 terminal records and prevents duplicate delivery across restarts. If either required key is missing, the worker stays idle and sends no network requests. The worker opens no HTTP port and does not expose either key to the browser or `/ping`.
 

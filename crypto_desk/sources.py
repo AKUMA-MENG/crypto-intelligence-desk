@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 import html
+import hashlib
 import json
 import logging
 import re
@@ -64,6 +65,21 @@ class _EmptySourceError(ValueError):
 class SourceDefinition:
     name: str
     urls: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SourceFetchResult:
+    by_source: Mapping[str, tuple[NewsItem, ...]]
+
+    @property
+    def items(self) -> tuple[NewsItem, ...]:
+        combined = [
+            item
+            for source_items in self.by_source.values()
+            for item in source_items
+        ]
+        combined.sort(key=lambda item: item.published_at)
+        return tuple(combined)
 
 
 SOURCE_DEFINITIONS: Mapping[str, SourceDefinition] = MappingProxyType({
@@ -186,12 +202,17 @@ class SourceClient:
 def fetch_sources(
     source_keys: Sequence[str], client: Any, now: datetime
 ) -> tuple[NewsItem, ...]:
+    return fetch_sources_with_status(source_keys, client, now).items
+
+
+def fetch_sources_with_status(
+    source_keys: Sequence[str], client: Any, now: datetime
+) -> SourceFetchResult:
     keys = tuple(source_keys)
     if not keys:
         raise SourceError("all sources failed")
 
-    combined: list[NewsItem] = []
-    successful_sources = 0
+    by_source: dict[str, tuple[NewsItem, ...]] = {}
     with ThreadPoolExecutor(max_workers=min(8, len(keys))) as executor:
         futures = {executor.submit(client.fetch, key, now): key for key in keys}
         for future in as_completed(futures):
@@ -200,15 +221,14 @@ def fetch_sources(
                 items = tuple(future.result())
                 if not items:
                     raise SourceError("empty source")
-                combined.extend(items)
-                successful_sources += 1
+                by_source[key] = items
             except Exception:
                 _LOGGER.warning("source_failed source=%s", key)
 
-    if successful_sources == 0:
+    if not by_source:
         raise SourceError("all sources failed")
-    combined.sort(key=lambda item: item.published_at)
-    return tuple(combined)
+    ordered = {key: by_source[key] for key in keys if key in by_source}
+    return SourceFetchResult(MappingProxyType(ordered))
 
 
 def _decode(response: HttpResponse, max_bytes: int) -> bytes:
@@ -244,7 +264,7 @@ def _parse(
         raise _ParseError
     except _EmptySourceError:
         raise
-    except (ElementTree.ParseError, json.JSONDecodeError, UnicodeDecodeError, TypeError, ValueError):
+    except (ElementTree.ParseError, UnicodeDecodeError, TypeError, ValueError):
         raise _ParseError from None
 
 
@@ -280,13 +300,22 @@ def _parse_rss(
         match = _TITLE_PREFIX.match(raw_title)
         title = _clean(match.group(1)) if match else raw_title
         body = _clean(((match.group(2) + " " + description).strip()) if match else description)
-        source_id = source_key + _title_hash(raw_title)
+        guid = _clean(fields.get("guid"))
+        link = _clean(fields.get("link"))
+        if guid:
+            source_id = _source_identity(source_key, "guid", guid)
+        elif link:
+            source_id = _source_identity(source_key, "link", link)
+        else:
+            source_id = _source_identity(
+                source_key, "title", _title_hash(raw_title)
+            )
         items.append(_item(
             source_id,
             definition.name,
             title,
             body,
-            _clean(fields.get("link")) or "#",
+            link or "#",
             _timestamp(fields.get("pubDate"), now),
         ))
         if len(items) == _MAX_ITEMS:
@@ -313,7 +342,13 @@ def _parse_json(
     parser = parsers.get(source_key)
     if parser is None:
         return []
-    return parser(payload, definition, now)[:_MAX_ITEMS]
+    return [
+        replace(
+            item,
+            source_id=_source_identity(source_key, "json", item.source_id),
+        )
+        for item in parser(payload, definition, now)[:_MAX_ITEMS]
+    ]
 
 
 def _jinse(payload: Mapping[str, Any], definition: SourceDefinition, now: datetime) -> list[NewsItem]:
@@ -474,10 +509,19 @@ def _bounded(value: str, limit: int) -> str:
 
 
 def _title_hash(title: str) -> str:
-    return "".join(
+    normalized = "".join(
         character for character in title
         if not character.isspace() and not unicodedata.category(character).startswith("P")
-    )[:42]
+    )
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+def _source_identity(source_key: str, kind: str, value: str) -> str:
+    prefix = source_key + ":" + kind + ":"
+    candidate = prefix + value
+    if len(candidate) <= MAX_SOURCE_ID_LENGTH:
+        return candidate
+    return prefix + "sha256:" + hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
 def _local_name(tag: str) -> str:

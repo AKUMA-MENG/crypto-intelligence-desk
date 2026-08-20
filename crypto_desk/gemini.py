@@ -120,7 +120,7 @@ def parse_analysis(text):
         )
     except GeminiRetryableError:
         raise
-    except (TypeError, ValueError, json.JSONDecodeError, OverflowError):
+    except (TypeError, ValueError, OverflowError):
         _invalid_analysis()
 
 
@@ -174,7 +174,6 @@ class GeminiClient:
             TypeError,
             UnicodeDecodeError,
             ValueError,
-            json.JSONDecodeError,
         ):
             raise GeminiRetryableError("invalid Gemini response") from None
         return parse_analysis(text)

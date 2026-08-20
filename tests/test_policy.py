@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
@@ -288,7 +289,7 @@ class PolicyTests(unittest.TestCase):
             state = store.load()
             state.baseline_initialized = True
             first = sample_news(title="first")
-            second = sample_news(title="second")
+            second = replace(sample_news(title="second"), source_id="sample-2")
             store.register_new(state, [first, second], NOW)
             store.save(state)
             gemini = FakeGemini([
@@ -377,7 +378,9 @@ https://news.example/item/1""")
             state = store.load()
             state.baseline_initialized = True
             failed_item = sample_news(title="first")
-            delivered_item = sample_news(title="second")
+            delivered_item = replace(
+                sample_news(title="second"), source_id="sample-2"
+            )
             store.register_new(state, [failed_item, delivered_item], NOW)
             store.save(state)
             bark = FakeBark(True)

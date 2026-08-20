@@ -9,9 +9,18 @@ class TransportError(Exception):
     """Raised when an upstream request cannot safely return a response."""
 
 
+class _RejectRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        del req, fp, code, msg, headers, newurl
+        return None
+
+
 class UrllibTransport:
-    def __init__(self, max_response_bytes: int = 2 * 1024 * 1024):
+    def __init__(self, max_response_bytes: int = 2 * 1024 * 1024, opener=None):
         self.max_response_bytes = max_response_bytes
+        self._opener = opener or urllib.request.build_opener(
+            _RejectRedirectHandler()
+        )
 
     def send(self, request: HttpRequest) -> HttpResponse:
         urllib_request = urllib.request.Request(
@@ -21,9 +30,14 @@ class UrllibTransport:
             method=request.method,
         )
         try:
-            with urllib.request.urlopen(urllib_request, timeout=request.timeout_seconds) as response:
+            with self._opener.open(
+                urllib_request, timeout=request.timeout_seconds
+            ) as response:
                 return self._response(response, response.status)
         except urllib.error.HTTPError as error:
+            if 300 <= error.code < 400:
+                self._close_http_error(error)
+                raise TransportError("upstream request failed") from None
             try:
                 response = self._response(error, error.code)
             except TransportError:

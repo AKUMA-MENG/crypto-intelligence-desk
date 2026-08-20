@@ -72,7 +72,7 @@ $rules = [ordered]@{
     'Legacy private storage key' = 'localStorage\.(?:getItem|setItem)\([''"]cnt_(?:set|ev)[''"]'
 }
 
-$textExtensions = @('.html', '.py', '.bat', '.cmd', '.ps1', '.sh', '.md', '.txt', '.json', '.gitignore')
+$textExtensions = @('.html', '.py', '.bat', '.cmd', '.ps1', '.sh', '.md', '.txt', '.json', '.gitignore', '.service', '.example')
 $files = Get-ChildItem -LiteralPath $projectRoot -Recurse -File | Where-Object {
     $_.Name -ne '.env' -and (
         $textExtensions -contains $_.Extension.ToLowerInvariant() -or

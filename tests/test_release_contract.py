@@ -62,6 +62,17 @@ class ReleaseContractTests(unittest.TestCase):
         scanner = (ROOT / "tools" / "check-release.ps1").read_text(encoding="utf-8")
         self.assertIn("$_.Name -ne '.env'", scanner)
 
+    def test_worker_docs_require_private_env_permissions(self):
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        chinese = (ROOT / "使用说明.md").read_text(encoding="utf-8")
+        self.assertIn("chmod 600 .env", readme)
+        self.assertIn("chmod 600 .env", chinese)
+
+    def test_release_scanner_includes_service_and_example_artifacts(self):
+        scanner = (ROOT / "tools" / "check-release.ps1").read_text(encoding="utf-8")
+        self.assertIn("'.service'", scanner)
+        self.assertIn("'.example'", scanner)
+
 
 if __name__ == "__main__":
     unittest.main()

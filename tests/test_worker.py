@@ -1,4 +1,5 @@
 from contextlib import redirect_stdout
+from dataclasses import replace
 from datetime import datetime, timezone
 import io
 import os
@@ -9,6 +10,7 @@ import unittest
 from unittest.mock import patch
 
 from crypto_desk.config import WorkerConfig
+from crypto_desk.sources import SourceFetchResult
 from crypto_desk.state import StateStore
 from crypto_desk.worker import Worker, main
 from tests.helpers import FakeProcessor, FakeSourceFetcher, sample_news
@@ -18,7 +20,7 @@ NOW = datetime(2026, 8, 20, 6, 0, tzinfo=timezone.utc)
 
 
 class WorkerTests(unittest.TestCase):
-    def config(self, tmp, configured=True):
+    def config(self, tmp, configured=True, sources=("panews",)):
         return WorkerConfig(
             gemini_api_key="fake" if configured else "",
             bark_push_key="fake" if configured else "",
@@ -26,7 +28,7 @@ class WorkerTests(unittest.TestCase):
             review_model="gemini-3.5-flash-lite",
             poll_seconds=30,
             state_file=Path(tmp) / "state.json",
-            sources=("panews",),
+            sources=sources,
         )
 
     def test_missing_configuration_makes_no_source_or_state_progress(self):
@@ -69,7 +71,10 @@ class WorkerTests(unittest.TestCase):
             fetcher = FakeSourceFetcher([sample_news(title="old")])
             worker = Worker(self.config(tmp), store, fetcher, processor)
             worker.run_once(NOW)
-            fetcher.items = [sample_news(title="old"), sample_news(title="new")]
+            fetcher.items = [
+                sample_news(title="old"),
+                replace(sample_news(title="new"), source_id="sample-2"),
+            ]
             self.assertEqual(worker.run_once(NOW), "poll_completed")
             self.assertEqual(processor.calls, 1)
             state = store.load()
@@ -120,6 +125,75 @@ class WorkerTests(unittest.TestCase):
             self.assertFalse(state_path.exists())
             self.assertEqual(worker.run_once(NOW), "baseline_created")
             self.assertTrue(StateStore(state_path).load().baseline_initialized)
+
+    def test_partial_cold_start_baselines_each_source_when_it_first_recovers(self):
+        panews_old = sample_news(title="PANews old")
+        panews_new = replace(
+            panews_old, source_id="panews:new", title="PANews new"
+        )
+        binance_old = replace(
+            panews_old,
+            source_id="binance:old",
+            source="Binance",
+            title="Binance old",
+        )
+
+        class PartialFetcher:
+            def __init__(self):
+                self.results = [
+                    SourceFetchResult({"panews": (panews_old,)}),
+                    SourceFetchResult({
+                        "panews": (panews_old, panews_new),
+                        "binance": (binance_old,),
+                    }),
+                ]
+
+            def __call__(self, source_names, now):
+                return self.results.pop(0)
+
+        with TemporaryDirectory() as tmp:
+            store = StateStore(Path(tmp) / "state.json")
+            processor = FakeProcessor()
+            config = self.config(tmp, sources=("panews", "binance"))
+            fetcher = PartialFetcher()
+
+            first_worker = Worker(config, store, fetcher, processor)
+            self.assertEqual(first_worker.run_once(NOW), "baseline_created")
+            after_partial = store.load()
+            self.assertEqual(after_partial.baselined_sources, ["panews"])
+            self.assertFalse(after_partial.baseline_initialized)
+
+            restarted_worker = Worker(config, store, fetcher, processor)
+            self.assertEqual(restarted_worker.run_once(NOW), "poll_completed")
+            final_state = store.load()
+            self.assertEqual(
+                final_state.baselined_sources, ["binance", "panews"]
+            )
+            self.assertTrue(final_state.baseline_initialized)
+            self.assertEqual(processor.calls, 1)
+            stages = {
+                record["item"]["title"]: record["stage"]
+                for record in final_state.items.values()
+            }
+            self.assertEqual(stages["Binance old"], "baseline")
+            self.assertEqual(stages["PANews new"], "pending_primary")
+
+    def test_corrupt_state_recovery_still_baselines_sources_individually(self):
+        with TemporaryDirectory() as tmp:
+            state_path = Path(tmp) / "state.json"
+            state_path.write_text("not-json", encoding="utf-8")
+            config = self.config(tmp, sources=("panews", "binance"))
+            result = SourceFetchResult({"panews": (sample_news(),)})
+            worker = Worker(
+                config,
+                StateStore(state_path),
+                lambda source_names, now: result,
+                FakeProcessor(),
+            )
+            self.assertEqual(worker.run_once(NOW), "baseline_created")
+            state = StateStore(state_path).load()
+            self.assertEqual(state.baselined_sources, ["panews"])
+            self.assertFalse(state.baseline_initialized)
 
     def test_two_concurrent_cycles_return_overlap_without_overlapping_fetches(self):
         class BlockingFetcher:
