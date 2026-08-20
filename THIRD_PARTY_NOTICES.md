@@ -2,7 +2,7 @@
 
 ## RSSHub
 
-`proxy.py` 中用于处理部分阿里云 WAF `acw_sc__v2` 挑战的兼容算法参考了 RSSHub 项目中的开源实现。
+`proxy.py` 与 `crypto_desk/source_http.py` 中用于处理部分阿里云 WAF `acw_sc__v2` 挑战的兼容算法参考了 RSSHub 项目中的开源实现。
 
 - Project: RSSHub
 - Repository: https://github.com/DIYgod/RSSHub
