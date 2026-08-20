@@ -43,6 +43,26 @@ class TransportTests(unittest.TestCase):
         self.assertEqual(response.status, 429)
         self.assertEqual(response.body, b'{"error":"rate"}')
 
+    @patch("crypto_desk.transport.urllib.request.urlopen")
+    def test_http_error_body_read_failure_is_sanitized(self, urlopen):
+        body = MagicMock()
+        body.read.side_effect = OSError(
+            "read failed https://secret.example/device-key"
+        )
+        urlopen.side_effect = HTTPError(
+            "https://secret.example/device-key",
+            502,
+            "upstream failed",
+            {"Content-Type": "application/json"},
+            body,
+        )
+        request = HttpRequest("GET", "https://example.com/", {}, None, 3)
+        with self.assertRaises(TransportError) as caught:
+            UrllibTransport().send(request)
+        self.assertEqual(str(caught.exception), "upstream request failed")
+        self.assertNotIn("device-key", str(caught.exception))
+        self.assertNotIn("https://secret.example/device-key", str(caught.exception))
+
 
 if __name__ == "__main__":
     unittest.main()

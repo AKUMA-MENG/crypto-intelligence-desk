@@ -25,9 +25,16 @@ class UrllibTransport:
                 return self._response(response, response.status)
         except urllib.error.HTTPError as error:
             try:
-                return self._response(error, error.code)
-            finally:
-                error.close()
+                response = self._response(error, error.code)
+            except TransportError:
+                self._close_http_error(error)
+                raise
+            except Exception:
+                self._close_http_error(error)
+                raise TransportError("upstream request failed") from None
+            if not self._close_http_error(error):
+                raise TransportError("upstream request failed")
+            return response
         except TransportError:
             raise
         except (OSError, urllib.error.URLError):
@@ -39,3 +46,11 @@ class UrllibTransport:
             raise TransportError("upstream response too large")
         headers: Mapping[str, str] = dict(response.headers.items()) if response.headers else {}
         return HttpResponse(status=status, headers=headers, body=body)
+
+    @staticmethod
+    def _close_http_error(error: urllib.error.HTTPError) -> bool:
+        try:
+            error.close()
+        except Exception:
+            return False
+        return True
