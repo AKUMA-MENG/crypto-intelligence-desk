@@ -71,15 +71,18 @@ class StateTests(unittest.TestCase):
     def test_delivery_started_becomes_unknown_after_restart(self):
         with TemporaryDirectory() as tmp:
             path = Path(tmp) / "state.json"
+            fingerprint = news_fingerprint(sample_news())
             path.write_text(json.dumps({
                 "version": 1,
                 "baseline_initialized": True,
-                "items": {"abc": complete_record("delivery_started")},
+                "items": {fingerprint: complete_record("delivery_started")},
             }), encoding="utf-8")
             state = StateStore(path).load()
-            self.assertEqual(state.items["abc"]["stage"], "delivery_unknown")
             self.assertEqual(
-                StateStore(path).load().items["abc"]["stage"],
+                state.items[fingerprint]["stage"], "delivery_unknown"
+            )
+            self.assertEqual(
+                StateStore(path).load().items[fingerprint]["stage"],
                 "delivery_unknown",
             )
 
@@ -103,6 +106,28 @@ class StateTests(unittest.TestCase):
             store.baseline(state, [first], NOW)
             self.assertEqual(store.register_new(state, [second], NOW), 0)
             record = state.items[news_fingerprint(first)]
+            self.assertEqual(record["stage"], "baseline")
+            self.assertEqual(record["source_ids"], ["other-2", "sample-1"])
+
+    def test_restart_dedupe_uses_canonical_terminal_fingerprint(self):
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "state.json"
+            store = StateStore(path)
+            state = store.load()
+            first = sample_news(source="PANews", title="重大：BTC 获批！")
+            second = replace(
+                first,
+                source_id="other-2",
+                source="Odaily",
+                title="重大 BTC获批",
+            )
+            store.baseline(state, [first], NOW)
+            store.save(state)
+
+            restarted = store.load()
+            self.assertEqual(store.register_new(restarted, [second], NOW), 0)
+            self.assertEqual(len(restarted.items), 1)
+            record = restarted.items[news_fingerprint(first)]
             self.assertEqual(record["stage"], "baseline")
             self.assertEqual(record["source_ids"], ["other-2", "sample-1"])
 
@@ -185,7 +210,7 @@ class StateTests(unittest.TestCase):
             for name, record in invalid_records:
                 with self.subTest(name=name):
                     state = store.load()
-                    state.items["abc"] = record
+                    state.items[news_fingerprint(sample_news())] = record
                     with self.assertRaisesRegex(
                         StateWriteError, "^state persistence failed$"
                     ):
@@ -199,7 +224,7 @@ class StateTests(unittest.TestCase):
             path.write_text(json.dumps({
                 "version": 1,
                 "baseline_initialized": True,
-                "items": {"abc": record},
+                "items": {news_fingerprint(sample_news()): record},
             }), encoding="utf-8")
             state = StateStore(path).load()
             self.assertFalse(state.baseline_initialized)
@@ -210,24 +235,54 @@ class StateTests(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             path = Path(tmp) / "state.json"
             state = StateStore(path).load()
-            state.items["abc"] = complete_record()
-            state.items["abc"]["primary_analysis"] = dict(VALID_ANALYSIS)
+            fingerprint = news_fingerprint(sample_news())
+            state.items[fingerprint] = complete_record()
+            state.items[fingerprint]["primary_analysis"] = dict(VALID_ANALYSIS)
             StateStore(path).save(state)
             loaded = StateStore(path).load()
             self.assertEqual(
-                loaded.items["abc"]["primary_analysis"], VALID_ANALYSIS
+                loaded.items[fingerprint]["primary_analysis"], VALID_ANALYSIS
             )
 
     def test_notification_pending_stage_round_trips(self):
         with TemporaryDirectory() as tmp:
             path = Path(tmp) / "state.json"
             state = StateStore(path).load()
-            state.items["abc"] = complete_record("notification_pending")
+            fingerprint = news_fingerprint(sample_news())
+            state.items[fingerprint] = complete_record("notification_pending")
             StateStore(path).save(state)
             self.assertEqual(
-                StateStore(path).load().items["abc"]["stage"],
+                StateStore(path).load().items[fingerprint]["stage"],
                 "notification_pending",
             )
+
+    def test_save_rejects_mismatched_fingerprint_and_preserves_target(self):
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "state.json"
+            store = StateStore(path)
+            state = store.load()
+            store.save(state)
+            original = path.read_bytes()
+            state.items["0" * 64] = complete_record()
+            with self.assertRaisesRegex(
+                StateWriteError, "^state persistence failed$"
+            ):
+                store.save(state)
+            self.assertEqual(path.read_bytes(), original)
+
+    def test_load_quarantines_mismatched_fingerprint(self):
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "state.json"
+            path.write_text(json.dumps({
+                "version": 1,
+                "baseline_initialized": True,
+                "items": {"0" * 64: complete_record()},
+            }), encoding="utf-8")
+            state = StateStore(path).load()
+            self.assertFalse(state.baseline_initialized)
+            self.assertEqual(state.items, {})
+            self.assertFalse(path.exists())
+            self.assertEqual(len(list(Path(tmp).glob("state.json.corrupt-*"))), 1)
 
     def test_prune_keeps_pending_and_removes_old_terminal_records(self):
         with TemporaryDirectory() as tmp:

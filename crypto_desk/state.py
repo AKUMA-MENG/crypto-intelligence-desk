@@ -106,7 +106,11 @@ class WorkerState:
 
 
 def news_fingerprint(item: NewsItem) -> str:
-    normalized = unicodedata.normalize("NFKC", item.title)
+    return _title_fingerprint(item.title)
+
+
+def _title_fingerprint(title: str) -> str:
+    normalized = unicodedata.normalize("NFKC", title)
     normalized = "".join(
         character.lower()
         for character in normalized
@@ -266,9 +270,14 @@ def _validate_state(state: WorkerState) -> None:
     if type(state.baseline_initialized) is not bool or type(state.items) is not dict:
         raise ValueError("invalid worker state")
     for fingerprint, record in state.items.items():
-        if type(fingerprint) is not str:
-            raise ValueError("invalid state record")
         _validate_record(record)
+        if (
+            type(fingerprint) is not str
+            or len(fingerprint) != 64
+            or any(character not in "0123456789abcdef" for character in fingerprint)
+            or fingerprint != _title_fingerprint(record["item"]["title"])
+        ):
+            raise ValueError("invalid state fingerprint")
 
 
 class StateStore:
