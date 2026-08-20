@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.1
+
+- Restore PANews production ingestion with the final RSS endpoint `https://www.panewslab.com/rss.xml?lang=zh&featured=true`.
+- Raise the default decoded gzip response limit to 3 MiB for current ChainCatcher payloads while retaining bounded decompression and rejection above the limit.
+
 ## 1.1.0
 
 - Add an optional independent 24-hour news worker using Gemini primary/review analysis.

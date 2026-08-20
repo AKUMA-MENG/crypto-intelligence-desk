@@ -35,6 +35,7 @@ _HTML_TAG = re.compile(r"<[^>]*>")
 _TITLE_PREFIX = re.compile(r"^【(.{2,80}?)】\s*(.*)$", re.DOTALL)
 
 _MAX_ITEMS = 30
+_DEFAULT_MAX_DECOMPRESSED_BYTES = 3 * 1024 * 1024
 
 _REFERERS = {
     "api.jinse.cn": "https://www.jinse.cn/",
@@ -92,8 +93,7 @@ SOURCE_DEFINITIONS: Mapping[str, SourceDefinition] = MappingProxyType({
         "https://api.theblockbeats.news/v1/open-api/home-xml",
     )),
     "panews": SourceDefinition("PANews", (
-        "https://rss.panewslab.com/zh/gtimg/rss",
-        "https://www.panewslab.com/webapi/flashnews?LId=1&Rn=30&tw=0",
+        "https://www.panewslab.com/rss.xml?lang=zh&featured=true",
     )),
     "binance": SourceDefinition("币安公告", (
         "https://www.binance.com/bapi/apex/v1/public/apex/cms/article/list/query?type=1&pageNo=1&pageSize=15&catalogId=48",
@@ -115,7 +115,7 @@ SOURCE_DEFINITIONS: Mapping[str, SourceDefinition] = MappingProxyType({
 _SOURCE_FORMATS: Mapping[str, tuple[str, ...]] = MappingProxyType({
     "jinse": ("json", "json"),
     "blockbeats": ("json", "json"),
-    "panews": ("rss", "json"),
+    "panews": ("rss",),
     "binance": ("json",),
     "odaily": ("rss",),
     "ctcn": ("rss",),
@@ -125,7 +125,11 @@ _SOURCE_FORMATS: Mapping[str, tuple[str, ...]] = MappingProxyType({
 
 
 class SourceClient:
-    def __init__(self, transport: Any, max_decompressed_bytes: int = 2 * 1024 * 1024):
+    def __init__(
+        self,
+        transport: Any,
+        max_decompressed_bytes: int = _DEFAULT_MAX_DECOMPRESSED_BYTES,
+    ):
         if max_decompressed_bytes < 1:
             raise ValueError("max_decompressed_bytes must be positive")
         self.transport = transport

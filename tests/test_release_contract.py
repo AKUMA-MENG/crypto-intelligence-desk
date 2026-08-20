@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class ReleaseContractTests(unittest.TestCase):
     def test_version_and_documented_models(self):
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "1.1.0")
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "1.1.1")
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         self.assertIn("gemini-3.1-flash-lite", readme)
         self.assertIn("gemini-3.5-flash-lite", readme)

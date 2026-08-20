@@ -234,21 +234,36 @@ class SourceTests(unittest.TestCase):
         self.assertEqual(len(items), 2)
         self.assertIn("Cookie", transport.requests[1].headers)
 
-    def test_panews_primary_requires_rss_before_json_fallback(self):
-        fallback = json.dumps({
-            "data": [{
-                "id": 1,
-                "publishTime": 1787202000000,
-                "title": "PANews JSON fallback",
-            }],
-        }).encode()
+    def test_panews_uses_current_final_rss_without_redirect_fallback(self):
+        self.assertEqual(
+            SOURCE_DEFINITIONS["panews"].urls,
+            ("https://www.panewslab.com/rss.xml?lang=zh&featured=true",),
+        )
+        self.assertEqual(sources_module._SOURCE_FORMATS["panews"], ("rss",))
+
+    def test_default_limit_accepts_current_catcher_sized_gzip(self):
+        large_description = "x" * 2262367
+        body = (
+            "<rss><channel><item><guid>cc-large</guid><title>链捕手测试</title>"
+            "<description>%s</description></item></channel></rss>"
+            % large_description
+        ).encode("utf-8")
         transport = RecordingTransport([
-            HttpResponse(200, {}, fallback),
-            HttpResponse(200, {}, fallback),
+            HttpResponse(200, {"Content-Encoding": "gzip"}, gzip.compress(body))
         ])
-        items = SourceClient(transport).fetch("panews", NOW)
-        self.assertEqual([item.title for item in items], ["PANews JSON fallback"])
-        self.assertEqual(len(transport.requests), 2)
+        self.assertEqual(len(SourceClient(transport).fetch("catcher", NOW)), 1)
+
+    def test_default_limit_rejects_gzip_over_three_mib(self):
+        oversized = b"x" * (3 * 1024 * 1024 + 1)
+        transport = RecordingTransport([
+            HttpResponse(
+                200,
+                {"Content-Encoding": "gzip"},
+                gzip.compress(oversized),
+            )
+        ])
+        with self.assertRaisesRegex(SourceError, "source response too large"):
+            SourceClient(transport).fetch("catcher", NOW)
 
     def test_rss_requires_rss_channel_envelope(self):
         body = (
