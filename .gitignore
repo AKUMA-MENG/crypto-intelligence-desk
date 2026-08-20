@@ -1,6 +1,5 @@
 # Local portable runtime downloaded on first Windows launch
 .runtime/
-.env
 
 # Python-generated files
 __pycache__/
@@ -16,5 +15,6 @@ Thumbs.db
 *.zip
 *.tmp
 *.log
+.env
 .worktrees/
 .superpowers/
