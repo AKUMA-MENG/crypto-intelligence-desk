@@ -24,6 +24,99 @@ CHALLENGE = b"<script>var arg1='0123456789ABCDEF0123456789ABCDEF01234567'</scrip
 
 
 class SourceTests(unittest.TestCase):
+    def test_every_json_adapter_gives_idless_records_distinct_stable_ids(self):
+        payloads = {
+            "jinse": {
+                "list": [{"lives": [
+                    {"content": "【同标题】正文 A"},
+                    {"content": "【同标题】正文 B"},
+                ]}],
+            },
+            "blockbeats": {
+                "data": {"data": [
+                    {"title": "同标题", "content": "正文 A"},
+                    {"title": "同标题", "content": "正文 B"},
+                ]},
+            },
+            "panews": {
+                "data": [
+                    {"title": "同标题", "desc": "正文 A"},
+                    {"title": "同标题", "desc": "正文 B"},
+                ],
+            },
+            "binance": {
+                "data": {"articles": [
+                    {"title": "公告 A"},
+                    {"title": "公告 B"},
+                ]},
+            },
+            "odaily": {
+                "data": {"items": [
+                    {"title": "同标题", "content": "正文 A"},
+                    {"title": "同标题", "content": "正文 B"},
+                ]},
+            },
+            "techflow": {
+                "data": [
+                    {"title": "同标题", "abstract": "正文 A"},
+                    {"title": "同标题", "abstract": "正文 B"},
+                ],
+            },
+        }
+        for source_key, payload in payloads.items():
+            with self.subTest(source=source_key):
+                definition = SOURCE_DEFINITIONS[source_key]
+                first_poll = sources_module._parse_json(
+                    source_key, definition, payload, NOW
+                )
+                second_poll = sources_module._parse_json(
+                    source_key, definition, payload, NOW
+                )
+                self.assertEqual(len(first_poll), 2)
+                self.assertEqual(len({item.source_id for item in first_poll}), 2)
+                self.assertEqual(
+                    [item.source_id for item in second_poll],
+                    [item.source_id for item in first_poll],
+                )
+                self.assertTrue(all(
+                    item.source_id.startswith(source_key + ":json:")
+                    for item in first_poll
+                ))
+
+    def test_every_json_adapter_preserves_normal_provider_id_behavior(self):
+        cases = {
+            "jinse": (
+                {"list": [{"lives": [{"id": 101, "content": "标题"}]}]},
+                "jinse:json:js101",
+            ),
+            "blockbeats": (
+                {"data": {"data": [{"id": 102, "title": "标题"}]}},
+                "blockbeats:json:bb102",
+            ),
+            "panews": (
+                {"data": [{"id": 103, "title": "标题"}]},
+                "panews:json:pa103",
+            ),
+            "binance": (
+                {"data": {"articles": [{"code": 104, "title": "标题"}]}},
+                "binance:json:bn104",
+            ),
+            "odaily": (
+                {"data": {"items": [{"id": 105, "title": "标题"}]}},
+                "odaily:json:od105",
+            ),
+            "techflow": (
+                {"data": [{"id": 106, "title": "标题"}]},
+                "techflow:json:tf106",
+            ),
+        }
+        for source_key, (payload, expected) in cases.items():
+            with self.subTest(source=source_key):
+                items = sources_module._parse_json(
+                    source_key, SOURCE_DEFINITIONS[source_key], payload, NOW
+                )
+                self.assertEqual(items[0].source_id, expected)
+
     def test_source_module_does_not_use_python_310_zip_strict_keyword(self):
         source_path = Path(sources_module.__file__)
         tree = ast.parse(source_path.read_text(encoding="utf-8"))

@@ -66,6 +66,8 @@ Copy `.env.example` to `.env`, fill `GEMINI_API_KEY` and `BARK_PUSH_KEY` locally
 
 The first configured run creates a baseline and does not push existing articles. State is retained for seven days or 2,000 terminal records and prevents duplicate delivery across restarts. If either required key is missing, the worker stays idle and sends no network requests. The worker opens no HTTP port and does not expose either key to the browser or `/ping`.
 
+After upgrading the worker state schema, v1 state is quarantined and each configured source is safely cold-baselined into v2. This one-time rebaseline suppresses the current feed instead of pushing old articles; do not restore the quarantined v1 file over the new state.
+
 ## 目录结构
 
 ```text

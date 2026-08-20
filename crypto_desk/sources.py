@@ -360,9 +360,11 @@ def _jinse(payload: Mapping[str, Any], definition: SourceDefinition, now: dateti
         match = _TITLE_PREFIX.match(content)
         title = _clean(match.group(1)) if match else content[:60]
         body = _clean(match.group(2)) if match else content
+        link = _clean(record.get("link"))
         output.append(_item(
-            "js" + str(record.get("id", "")), definition.name, title, body,
-            _clean(record.get("link")) or "https://www.jinse.cn/lives/" + str(record.get("id", "")) + ".html",
+            _json_record_identity("js", record.get("id"), link, title, body),
+            definition.name, title, body,
+            link or "https://www.jinse.cn/lives/" + str(record.get("id", "")) + ".html",
             _timestamp(record.get("created_at"), now),
         ))
     return _titled(output)
@@ -378,11 +380,16 @@ def _blockbeats(payload: Mapping[str, Any], definition: SourceDefinition, now: d
         records = []
     output = []
     for record in _dicts(records):
-        identity = record.get("id") or record.get("article_id") or record.get("url") or ""
+        title = _clean(record.get("title"))
+        body = _clean(record.get("content") or record.get("abstract"))
+        link = _clean(record.get("link") or record.get("url"))
         output.append(_item(
-            "bb" + str(identity), definition.name, _clean(record.get("title")),
-            _clean(record.get("content") or record.get("abstract")),
-            _clean(record.get("link") or record.get("url")) or "https://www.theblockbeats.info/newsflash",
+            _json_record_identity(
+                "bb", record.get("id") or record.get("article_id"),
+                link, title, body,
+            ),
+            definition.name, title, body,
+            link or "https://www.theblockbeats.info/newsflash",
             _timestamp(record.get("create_time") or record.get("add_time") or record.get("created_at"), now),
         ))
     return _titled(output)
@@ -403,12 +410,19 @@ def _panews(payload: Mapping[str, Any], definition: SourceDefinition, now: datet
         records = data["list"]
     output = []
     for record in _dicts(records):
-        identity = record.get("id") or record.get("newsId") or record.get("title") or ""
+        title = _clean(record.get("title"))
+        body = _clean(record.get("desc") or record.get("description") or record.get("content"))
+        link = _clean(record.get("link") or record.get("url") or record.get("news_url"))
         output.append(_item(
-            "pa" + str(identity), definition.name, _clean(record.get("title")),
-            _clean(record.get("desc") or record.get("description") or record.get("content")),
-            "https://www.panewslab.com/zh/newsflash/" + str(record["id"])
-            if record.get("id") else "https://www.panewslab.com/zh/newsflash",
+            _json_record_identity(
+                "pa", record.get("id") or record.get("newsId"),
+                link, title, body,
+            ),
+            definition.name, title, body,
+            link or (
+                "https://www.panewslab.com/zh/newsflash/" + str(record["id"])
+                if record.get("id") else "https://www.panewslab.com/zh/newsflash"
+            ),
             _timestamp(record.get("publishTime") or record.get("publish_time") or record.get("dateInfo"), now),
         ))
     return _titled(output)
@@ -426,9 +440,12 @@ def _binance(payload: Mapping[str, Any], definition: SourceDefinition, now: date
     output = []
     for record in _dicts(records):
         code = record.get("code") or record.get("id") or ""
+        title = _clean(record.get("title"))
+        link = _clean(record.get("link") or record.get("url"))
         output.append(_item(
-            "bn" + str(code), definition.name, _clean(record.get("title")), "",
-            "https://www.binance.com/zh-CN/support/announcement/" + str(record.get("code") or ""),
+            _json_record_identity("bn", code, link, title, ""),
+            definition.name, title, "",
+            link or "https://www.binance.com/zh-CN/support/announcement/" + str(record.get("code") or ""),
             _timestamp(record.get("releaseDate") or record.get("releasedate"), now),
         ))
     return _titled(output)
@@ -444,11 +461,13 @@ def _odaily(payload: Mapping[str, Any], definition: SourceDefinition, now: datet
         records = []
     output = []
     for record in _dicts(records):
-        identity = record.get("id") or record.get("title") or ""
+        title = _clean(record.get("title"))
+        body = _clean(record.get("description") or record.get("content"))
+        link = _clean(record.get("news_url") or record.get("link") or record.get("url"))
         output.append(_item(
-            "od" + str(identity), definition.name, _clean(record.get("title")),
-            _clean(record.get("description") or record.get("content")),
-            _clean(record.get("news_url")) or "https://www.odaily.news/newsflash/" + str(record.get("id") or ""),
+            _json_record_identity("od", record.get("id"), link, title, body),
+            definition.name, title, body,
+            link or "https://www.odaily.news/newsflash/" + str(record.get("id") or ""),
             _timestamp(record.get("published_at"), now),
         ))
     return _titled(output)
@@ -459,10 +478,13 @@ def _techflow(payload: Mapping[str, Any], definition: SourceDefinition, now: dat
     output = []
     for record in _dicts(records):
         identity = record.get("id") or ""
+        title = _clean(record.get("title"))
+        body = _clean(record.get("abstract"))
+        link = _clean(record.get("link") or record.get("url"))
         output.append(_item(
-            "tf" + str(identity), definition.name, _clean(record.get("title")),
-            _clean(record.get("abstract")),
-            "https://www.techflowpost.com/zh-CN/newsletter/" + str(identity),
+            _json_record_identity("tf", identity, link, title, body),
+            definition.name, title, body,
+            link or "https://www.techflowpost.com/zh-CN/newsletter/" + str(identity),
             _timestamp(record.get("created_at"), now),
         ))
     return _titled(output)
@@ -522,6 +544,25 @@ def _source_identity(source_key: str, kind: str, value: str) -> str:
     if len(candidate) <= MAX_SOURCE_ID_LENGTH:
         return candidate
     return prefix + "sha256:" + hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _json_record_identity(
+    prefix: str,
+    provider_id: Any,
+    canonical_link: Any,
+    title: Any,
+    body: Any,
+) -> str:
+    identity = _clean(provider_id)
+    if identity:
+        return prefix + identity
+    link = _clean(canonical_link)
+    if link:
+        return "link:" + link
+    normalized = unicodedata.normalize(
+        "NFKC", _clean(title) + "\n" + _clean(body)
+    ).casefold()
+    return "content:" + hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
 def _local_name(tag: str) -> str:

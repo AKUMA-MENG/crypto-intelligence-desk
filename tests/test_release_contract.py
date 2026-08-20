@@ -68,6 +68,12 @@ class ReleaseContractTests(unittest.TestCase):
         self.assertIn("chmod 600 .env", readme)
         self.assertIn("chmod 600 .env", chinese)
 
+    def test_worker_docs_explain_safe_v1_state_rebaseline(self):
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        chinese = (ROOT / "使用说明.md").read_text(encoding="utf-8")
+        self.assertIn("v1 state is quarantined", readme)
+        self.assertIn("v1 状态文件会被隔离", chinese)
+
     def test_release_scanner_includes_service_and_example_artifacts(self):
         scanner = (ROOT / "tools" / "check-release.ps1").read_text(encoding="utf-8")
         self.assertIn("'.service'", scanner)
