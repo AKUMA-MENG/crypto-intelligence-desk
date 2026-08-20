@@ -11,6 +11,7 @@ from tests.helpers import RecordingTransport, sample_news
 
 FIXTURES = Path(__file__).parent / "fixtures"
 NOW = datetime(2026, 8, 20, 6, 0, tzinfo=timezone.utc)
+CHALLENGE = b"<script>var arg1='0123456789ABCDEF0123456789ABCDEF01234567'</script>"
 
 
 class SourceTests(unittest.TestCase):
@@ -52,15 +53,68 @@ class SourceTests(unittest.TestCase):
         self.assertNotIn("private-response-body", str(caught.exception))
 
     def test_techflow_waf_challenge_retries_once_with_cookie(self):
-        challenge = b"<script>var arg1='0123456789ABCDEF0123456789ABCDEF01234567'</script>"
         success = (FIXTURES / "techflow.json").read_bytes()
         transport = RecordingTransport([
-            HttpResponse(200, {}, challenge),
+            HttpResponse(200, {}, CHALLENGE),
             HttpResponse(200, {}, success),
         ])
         items = SourceClient(transport).fetch("techflow", NOW)
         self.assertEqual(len(items), 2)
         self.assertIn("Cookie", transport.requests[1].headers)
+
+    def test_panews_primary_requires_rss_before_json_fallback(self):
+        fallback = json.dumps({
+            "data": [{
+                "id": 1,
+                "publishTime": 1787202000000,
+                "title": "PANews JSON fallback",
+            }],
+        }).encode()
+        transport = RecordingTransport([
+            HttpResponse(200, {}, fallback),
+            HttpResponse(200, {}, fallback),
+        ])
+        items = SourceClient(transport).fetch("panews", NOW)
+        self.assertEqual([item.title for item in items], ["PANews JSON fallback"])
+        self.assertEqual(len(transport.requests), 2)
+
+    def test_rss_requires_rss_channel_envelope(self):
+        body = (
+            b"<unrelated><item><title>incompatible</title>"
+            b"<pubDate>Thu, 20 Aug 2026 05:00:00 GMT</pubDate>"
+            b"</item></unrelated>"
+        )
+        transport = RecordingTransport([HttpResponse(200, {}, body)])
+        with self.assertRaisesRegex(SourceError, "source parse failed") as caught:
+            SourceClient(transport).fetch("odaily", NOW)
+        self.assertNotIn("incompatible", str(caught.exception))
+
+    def test_json_only_source_rejects_well_formed_rss(self):
+        body = (FIXTURES / "panews.xml").read_bytes()
+        transport = RecordingTransport([HttpResponse(200, {}, body)])
+        with self.assertRaisesRegex(SourceError, "source parse failed"):
+            SourceClient(transport).fetch("binance", NOW)
+        self.assertEqual(len(transport.requests), 1)
+
+    def test_non_techflow_challenge_does_not_retry(self):
+        success = (FIXTURES / "binance.json").read_bytes()
+        transport = RecordingTransport([
+            HttpResponse(200, {}, CHALLENGE),
+            HttpResponse(200, {}, success),
+        ])
+        with self.assertRaisesRegex(SourceError, "source parse failed"):
+            SourceClient(transport).fetch("binance", NOW)
+        self.assertEqual(len(transport.requests), 1)
+
+    def test_repeated_techflow_challenge_stops_after_one_retry(self):
+        transport = RecordingTransport([
+            HttpResponse(200, {}, CHALLENGE),
+            HttpResponse(200, {}, CHALLENGE),
+        ])
+        with self.assertRaisesRegex(SourceError, "source fetch failed") as caught:
+            SourceClient(transport).fetch("techflow", NOW)
+        self.assertNotIn("arg1", str(caught.exception))
+        self.assertEqual(len(transport.requests), 2)
 
     def test_gzip_decompression_limit_is_enforced(self):
         compressed = gzip.compress(b"x" * 65)

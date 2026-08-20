@@ -96,6 +96,17 @@ SOURCE_DEFINITIONS: Mapping[str, SourceDefinition] = MappingProxyType({
     )),
 })
 
+_SOURCE_FORMATS: Mapping[str, tuple[str, ...]] = MappingProxyType({
+    "jinse": ("json", "json"),
+    "blockbeats": ("json", "json"),
+    "panews": ("rss", "json"),
+    "binance": ("json",),
+    "odaily": ("rss",),
+    "ctcn": ("rss",),
+    "techflow": ("json",),
+    "catcher": ("rss",),
+})
+
 
 class SourceClient:
     def __init__(self, transport: Any, max_decompressed_bytes: int = 2 * 1024 * 1024):
@@ -112,10 +123,14 @@ class SourceClient:
         instant = _utc(now)
         retained_error: SourceError | None = None
 
-        for url in definition.urls:
+        for url, expected_format in zip(
+            definition.urls, _SOURCE_FORMATS[source_key], strict=True
+        ):
             try:
-                body = self._request(url)
-                items = _parse(source_key, definition, body, instant)
+                body = self._request(source_key, url)
+                items = _parse(
+                    source_key, definition, expected_format, body, instant
+                )
                 if not items:
                     raise _EmptySourceError
                 return tuple(items[:_MAX_ITEMS])
@@ -131,15 +146,19 @@ class SourceClient:
             raise retained_error
         raise SourceError("source fetch failed")
 
-    def _request(self, url: str) -> bytes:
+    def _request(self, source_key: str, url: str) -> bytes:
         host = (urlsplit(url).hostname or "").lower()
-        response = self._send(url, host, self._waf_cookies.get(host))
+        cached_cookie = self._waf_cookies.get(host) if source_key == "techflow" else None
+        response = self._send(url, host, cached_cookie)
         body = _decode(response, self.max_decompressed_bytes)
-        cookie = challenge_cookie(body)
-        if cookie is not None:
-            self._waf_cookies[host] = cookie
-            response = self._send(url, host, cookie)
-            body = _decode(response, self.max_decompressed_bytes)
+        if source_key == "techflow":
+            cookie = challenge_cookie(body)
+            if cookie is not None:
+                self._waf_cookies[host] = cookie
+                response = self._send(url, host, cookie)
+                body = _decode(response, self.max_decompressed_bytes)
+                if challenge_cookie(body) is not None:
+                    raise RuntimeError("source request failed")
         if not 200 <= response.status < 300:
             raise RuntimeError("source request failed")
         return body
@@ -208,6 +227,7 @@ def _decode(response: HttpResponse, max_bytes: int) -> bytes:
 def _parse(
     source_key: str,
     definition: SourceDefinition,
+    expected_format: str,
     body: bytes,
     now: datetime,
 ) -> list[NewsItem]:
@@ -215,10 +235,12 @@ def _parse(
         text = body.decode("utf-8-sig").strip()
         if not text:
             raise _EmptySourceError
-        if text.startswith("<"):
+        if expected_format == "rss":
             return _parse_rss(source_key, definition, text, now)
-        payload = json.loads(text)
-        return _parse_json(source_key, definition, payload, now)
+        if expected_format == "json":
+            payload = json.loads(text)
+            return _parse_json(source_key, definition, payload, now)
+        raise _ParseError
     except _EmptySourceError:
         raise
     except (ElementTree.ParseError, json.JSONDecodeError, UnicodeDecodeError, TypeError, ValueError):
@@ -232,9 +254,20 @@ def _parse_rss(
     now: datetime,
 ) -> list[NewsItem]:
     root = ElementTree.fromstring(text)
+    if _local_name(root.tag).lower() != "rss":
+        raise _ParseError
+    channel = next(
+        (
+            child for child in root
+            if _local_name(child.tag).lower() == "channel"
+        ),
+        None,
+    )
+    if channel is None:
+        raise _ParseError
     items = []
-    for element in root.iter():
-        if _local_name(element.tag) != "item":
+    for element in channel:
+        if _local_name(element.tag).lower() != "item":
             continue
         fields: dict[str, str] = {}
         for child in element:
@@ -242,7 +275,7 @@ def _parse_rss(
         raw_title = _clean(fields.get("title"))
         if not raw_title:
             continue
-        description = _clean(fields.get("description") or fields.get("content:encoded"))
+        description = _clean(fields.get("description") or fields.get("encoded"))
         match = _TITLE_PREFIX.match(raw_title)
         title = _clean(match.group(1)) if match else raw_title
         body = _clean(((match.group(2) + " " + description).strip()) if match else description)
